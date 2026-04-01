@@ -3,3 +3,8 @@ __pycache__/
 models/*.joblib
 artifacts/
 logs.txt
+.openml_cache/
+*.egg-info/
+streamlit.out.log
+streamlit.err.log
+tmp/
