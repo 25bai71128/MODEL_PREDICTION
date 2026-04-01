@@ -28,7 +28,7 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 
 try:
@@ -160,6 +160,30 @@ def _build_pipeline(model: Any, X: pd.DataFrame) -> Pipeline:
     return Pipeline([("preprocessor", build_preprocessor(X)), ("model", clone(model))])
 
 
+def _fit_and_predict_model(
+    model_name: str,
+    model: Any,
+    X: pd.DataFrame,
+    X_train: pd.DataFrame,
+    X_test: pd.DataFrame,
+    y_train: pd.Series,
+) -> tuple[Pipeline, np.ndarray]:
+    """Fit a candidate model and return predictions on the test split."""
+    pipeline = _build_pipeline(model, X)
+
+    if model_name == "XGBoost" and isinstance(model, XGBClassifier):
+        label_encoder = LabelEncoder()
+        y_train_encoded = label_encoder.fit_transform(y_train.astype(str))
+        pipeline.fit(X_train, y_train_encoded)
+        y_pred_encoded = pipeline.predict(X_test)
+        y_pred = label_encoder.inverse_transform(y_pred_encoded.astype(int))
+        return pipeline, y_pred
+
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+    return pipeline, y_pred
+
+
 def _score_predictions(problem_type: str, y_true: pd.Series, y_pred: np.ndarray) -> dict[str, float]:
     """Compute task-appropriate metrics."""
     if problem_type == "classification":
@@ -214,9 +238,14 @@ def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
 
     for model_name, model in _candidate_models(problem_type):
         try:
-            pipeline = _build_pipeline(model, working_df)
-            pipeline.fit(X_train, y_train)
-            y_pred = pipeline.predict(X_test)
+            pipeline, y_pred = _fit_and_predict_model(
+                model_name=model_name,
+                model=model,
+                X=working_df,
+                X_train=X_train,
+                X_test=X_test,
+                y_train=y_train,
+            )
             metrics = _score_predictions(problem_type, y_test, y_pred)
             leaderboard.append({"model": model_name, **metrics})
             fitted_models[model_name] = pipeline
