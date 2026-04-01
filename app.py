@@ -62,35 +62,125 @@ def _inject_styles() -> None:
         """
         <style>
         :root {
-            --bg: #f3efe7;
-            --panel: rgba(255, 252, 246, 0.9);
-            --ink: #172026;
-            --muted: #51616c;
+            --bg: #f4efe7;
+            --bg-alt: #fbf8f2;
+            --panel: rgba(255, 255, 255, 0.84);
+            --panel-strong: #fffdf9;
+            --ink: #101828;
+            --muted: #5b6472;
             --accent: #0f766e;
-            --border: rgba(23, 32, 38, 0.08);
+            --gold: #b7791f;
+            --line: rgba(15, 23, 42, 0.1);
+            --card-shadow: 0 22px 50px rgba(15, 23, 42, 0.09);
+            --sidebar-bg: #0d1320;
+            --sidebar-panel: rgba(255, 255, 255, 0.06);
+            --sidebar-line: rgba(148, 163, 184, 0.18);
+            --sidebar-ink: #f8fafc;
+            --sidebar-muted: #cbd5e1;
+        }
+
+        html, body, [class*="css"] {
+            font-family: "Aptos", "Segoe UI", sans-serif;
         }
 
         .stApp {
             background:
-                radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 34%),
-                radial-gradient(circle at top right, rgba(180, 83, 9, 0.10), transparent 28%),
-                linear-gradient(180deg, #f8f4eb 0%, #eef4f2 100%);
+                radial-gradient(circle at top left, rgba(15, 118, 110, 0.16), transparent 34%),
+                radial-gradient(circle at top right, rgba(183, 121, 31, 0.12), transparent 24%),
+                linear-gradient(180deg, #f9f5ee 0%, #eef4f2 48%, #f9f6f0 100%);
+        }
+
+        .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"] {
             color: var(--ink);
         }
 
+        [data-testid="stAppViewContainer"] > .main {
+            background: transparent;
+        }
+
+        .block-container {
+            max-width: 1380px;
+            padding-top: 1.6rem;
+            padding-bottom: 3rem;
+        }
+
         div[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, rgba(251, 247, 239, 0.98), rgba(241, 248, 246, 0.98));
-            border-right: 1px solid var(--border);
+            background:
+                radial-gradient(circle at top right, rgba(15, 118, 110, 0.22), transparent 28%),
+                linear-gradient(180deg, #0d1320 0%, #111827 56%, #18212f 100%);
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        div[data-testid="stSidebar"] * {
+            color: var(--sidebar-ink);
+        }
+
+        div[data-testid="stSidebar"] p,
+        div[data-testid="stSidebar"] label,
+        div[data-testid="stSidebar"] span,
+        div[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        div[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+            color: var(--sidebar-muted) !important;
+        }
+
+        div[data-testid="stSidebar"] h1,
+        div[data-testid="stSidebar"] h2,
+        div[data-testid="stSidebar"] h3 {
+            color: var(--sidebar-ink) !important;
+        }
+
+        div[data-testid="stSidebar"] [data-baseweb="select"] > div,
+        div[data-testid="stSidebar"] .stNumberInput input,
+        div[data-testid="stSidebar"] .stTextInput input,
+        div[data-testid="stSidebar"] .stTextArea textarea {
+            background: var(--sidebar-panel) !important;
+            color: var(--sidebar-ink) !important;
+            border: 1px solid var(--sidebar-line) !important;
+            border-radius: 16px !important;
+        }
+
+        div[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px dashed rgba(255, 255, 255, 0.18);
+            border-radius: 18px;
+        }
+
+        div[data-testid="stSidebar"] button {
+            border-radius: 16px !important;
+            min-height: 48px;
+            font-weight: 600;
+        }
+
+        div[data-testid="stSidebar"] button[data-testid="baseButton-primary"],
+        div[data-testid="stSidebar"] button[kind="primary"] {
+            background: linear-gradient(135deg, #0f766e, #14b8a6) !important;
+            color: #f8fafc !important;
+            border: none !important;
+            box-shadow: 0 18px 34px rgba(20, 184, 166, 0.18);
+        }
+
+        div[data-testid="stSidebar"] button[data-testid="baseButton-secondary"],
+        div[data-testid="stSidebar"] button[kind="secondary"] {
+            background: rgba(255, 255, 255, 0.03) !important;
+            color: var(--sidebar-ink) !important;
+            border: 1px solid var(--sidebar-line) !important;
         }
 
         .hero-shell {
-            background: linear-gradient(135deg, rgba(23, 32, 38, 0.95), rgba(15, 118, 110, 0.92));
+            background:
+                radial-gradient(circle at top left, rgba(255, 255, 255, 0.14), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.22), transparent 32%),
+                linear-gradient(135deg, rgba(12, 17, 29, 0.98), rgba(14, 65, 70, 0.96), rgba(21, 128, 61, 0.92));
             border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 24px;
-            padding: 1.6rem 1.5rem;
+            border-radius: 30px;
+            padding: 1.9rem 1.8rem;
             color: #f9fafb;
-            box-shadow: 0 18px 44px rgba(23, 32, 38, 0.18);
-            margin-bottom: 1rem;
+            box-shadow: 0 30px 70px rgba(12, 17, 29, 0.22);
+            margin-bottom: 1.2rem;
+            position: relative;
+            overflow: hidden;
         }
 
         .hero-kicker {
@@ -103,40 +193,40 @@ def _inject_styles() -> None:
         }
 
         .hero-title {
-            font-size: 2.1rem;
-            line-height: 1.05;
-            margin: 0 0 0.55rem 0;
-            font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+            font-size: clamp(2.1rem, 3.7vw, 3.25rem);
+            line-height: 1.03;
+            margin: 0 0 0.7rem 0;
+            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
             font-weight: 700;
         }
 
         .hero-copy {
             max-width: 58rem;
             color: rgba(249, 250, 251, 0.88);
-            font-size: 1rem;
-            line-height: 1.55;
+            font-size: 1.02rem;
+            line-height: 1.6;
             margin: 0;
-            font-family: "Trebuchet MS", "Verdana", sans-serif;
+            font-family: "Aptos", "Segoe UI", sans-serif;
         }
 
         .mini-card-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-            gap: 0.8rem;
-            margin: 1rem 0 1.2rem 0;
+            gap: 0.95rem;
+            margin: 1rem 0 1.3rem 0;
         }
 
         .mini-card {
-            background: var(--panel);
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            padding: 1rem;
-            box-shadow: 0 10px 24px rgba(23, 32, 38, 0.06);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(250, 248, 243, 0.9));
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            padding: 1.05rem;
+            box-shadow: var(--card-shadow);
         }
 
         .mini-card h4 {
             margin: 0 0 0.35rem 0;
-            font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
             color: var(--ink);
         }
 
@@ -145,42 +235,197 @@ def _inject_styles() -> None:
         .callout span {
             margin: 0;
             color: var(--muted);
-            font-size: 0.92rem;
-            line-height: 1.45;
-            font-family: "Trebuchet MS", "Verdana", sans-serif;
+            font-size: 0.95rem;
+            line-height: 1.55;
+            font-family: "Aptos", "Segoe UI", sans-serif;
         }
 
         .callout {
-            background: var(--panel);
-            border: 1px solid var(--border);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 248, 243, 0.92));
+            border: 1px solid var(--line);
             border-left: 5px solid var(--accent);
-            border-radius: 18px;
+            border-radius: 22px;
             padding: 1rem 1rem 0.95rem 1rem;
-            box-shadow: 0 10px 22px rgba(23, 32, 38, 0.06);
+            box-shadow: var(--card-shadow);
         }
 
         .callout strong {
             display: block;
             margin-bottom: 0.35rem;
             color: var(--ink);
-            font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
         }
 
         .pill-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.5rem;
-            margin-top: 0.75rem;
+            gap: 0.6rem;
+            margin-top: 1rem;
         }
 
         .pill {
-            background: rgba(255, 255, 255, 0.7);
-            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.14);
+            border: 1px solid rgba(255, 255, 255, 0.14);
             border-radius: 999px;
-            padding: 0.35rem 0.75rem;
+            padding: 0.45rem 0.9rem;
             color: #f8fafc;
-            font-size: 0.85rem;
-            font-family: "Trebuchet MS", "Verdana", sans-serif;
+            font-size: 0.86rem;
+            font-family: "Aptos", "Segoe UI", sans-serif;
+            backdrop-filter: blur(8px);
+        }
+
+        h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+            color: var(--ink) !important;
+            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+            letter-spacing: -0.02em;
+        }
+
+        p, li, label, span, .stMarkdown, .stText, .stCaption {
+            color: var(--muted);
+        }
+
+        [data-testid="stMetric"] {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(251, 248, 241, 0.96));
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            padding: 1rem 1.05rem;
+            box-shadow: var(--card-shadow);
+            min-height: 118px;
+        }
+
+        [data-testid="stMetricLabel"] p,
+        [data-testid="stMetricLabel"] label,
+        [data-testid="stMetricLabel"] div {
+            color: var(--muted) !important;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-size: 0.78rem !important;
+            font-weight: 600;
+        }
+
+        [data-testid="stMetricValue"] {
+            color: var(--ink) !important;
+            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+            font-size: 2.15rem !important;
+            line-height: 1.05;
+        }
+
+        .stTabs [data-baseweb="tab-list"] {
+            background: rgba(255, 255, 255, 0.68);
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            display: inline-flex;
+            gap: 0.4rem;
+            padding: 0.35rem;
+            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.05);
+        }
+
+        .stTabs [data-baseweb="tab-highlight"] {
+            display: none;
+        }
+
+        .stTabs [data-baseweb="tab"] {
+            height: auto;
+            background: transparent;
+            border-radius: 999px;
+            color: var(--muted);
+            font-weight: 600;
+            padding: 0.55rem 1rem;
+        }
+
+        .stTabs [aria-selected="true"] {
+            background: linear-gradient(135deg, #0f172a, #0f766e) !important;
+            color: #f8fafc !important;
+            box-shadow: 0 12px 30px rgba(15, 118, 110, 0.22);
+        }
+
+        details[data-testid="stExpander"] {
+            background: rgba(255, 255, 255, 0.76);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
+            overflow: hidden;
+        }
+
+        [data-testid="stAlert"] {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            color: var(--ink);
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
+        }
+
+        [data-testid="stAlert"] p,
+        [data-testid="stAlert"] span,
+        [data-testid="stAlert"] div {
+            color: var(--ink) !important;
+        }
+
+        [data-testid="stDataFrame"],
+        [data-testid="stTable"] {
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid var(--line);
+            border-radius: 20px;
+            padding: 0.2rem;
+            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
+        }
+
+        [data-baseweb="select"] > div,
+        .stTextInput input,
+        .stTextArea textarea,
+        .stNumberInput input {
+            background: rgba(255, 255, 255, 0.82) !important;
+            color: var(--ink) !important;
+            border: 1px solid var(--line) !important;
+            border-radius: 16px !important;
+        }
+
+        [data-baseweb="select"] * {
+            color: var(--ink) !important;
+        }
+
+        [data-testid="stFileUploaderDropzone"] {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px dashed rgba(15, 118, 110, 0.3);
+            border-radius: 18px;
+        }
+
+        .stButton > button,
+        .stDownloadButton > button {
+            border-radius: 16px;
+            min-height: 48px;
+            font-weight: 600;
+            border: 1px solid var(--line);
+            background: rgba(255, 255, 255, 0.8);
+            color: var(--ink);
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+        }
+
+        .stButton > button[data-testid="baseButton-primary"],
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #0f172a, #0f766e) !important;
+            color: #f8fafc !important;
+            border: none !important;
+        }
+
+        .stPlotlyChart,
+        .stAltairChart {
+            background: rgba(255, 255, 255, 0.74);
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            padding: 0.55rem 0.7rem 0.35rem 0.7rem;
+            box-shadow: 0 18px 38px rgba(15, 23, 42, 0.05);
+        }
+
+        @media (max-width: 960px) {
+            .hero-shell {
+                padding: 1.45rem 1.25rem;
+                border-radius: 24px;
+            }
+
+            [data-testid="stMetric"] {
+                min-height: 106px;
+            }
         }
         </style>
         """,
@@ -206,6 +451,44 @@ def _render_hero() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def _style_altair_chart(chart: Any) -> Any:
+    """Apply a shared premium theme to Altair charts."""
+    return (
+        chart.properties(padding={"left": 8, "right": 12, "top": 6, "bottom": 8})
+        .configure(background="transparent")
+        .configure_view(strokeOpacity=0)
+        .configure_axis(
+            labelColor="#475467",
+            titleColor="#101828",
+            domainColor="rgba(15, 23, 42, 0.16)",
+            tickColor="rgba(15, 23, 42, 0.16)",
+            gridColor="rgba(148, 163, 184, 0.22)",
+            labelFont="Aptos",
+            titleFont="Aptos",
+            labelFontSize=12,
+            titleFontSize=13,
+        )
+        .configure_legend(
+            labelColor="#475467",
+            titleColor="#101828",
+            labelFont="Aptos",
+            titleFont="Aptos",
+        )
+        .configure_header(
+            labelColor="#101828",
+            titleColor="#101828",
+            labelFont="Aptos",
+            titleFont="Aptos",
+        )
+        .configure_title(color="#101828", font="Aptos")
+    )
+
+
+def _show_altair_chart(chart: Any) -> None:
+    """Render an Altair chart with the shared visual theme."""
+    st.altair_chart(_style_altair_chart(chart), use_container_width=True, theme=None)
 
 
 @st.cache_data(show_spinner=False)
@@ -847,6 +1130,53 @@ def _build_analysis_brief(
     return points
 
 
+def _render_command_center_visuals(
+    df: pd.DataFrame,
+    target_column: str,
+    dataset_health: dict[str, Any],
+    benchmark_result: dict[str, Any] | None,
+    meta_result: dict[str, Any] | None,
+) -> None:
+    """Render high-signal visuals on the first report tab."""
+    st.markdown("### Visual Snapshot")
+    st.markdown(
+        '<p class="section-copy">A fast read on target behavior and model preference before you move into the detailed tabs.</p>',
+        unsafe_allow_html=True,
+    )
+
+    left_col, right_col = st.columns(2, gap="large")
+
+    with left_col:
+        if meta_result:
+            st.subheader("Meta-model signal")
+            recommendation_chart = _recommendation_chart(meta_result["top_3"])
+            if recommendation_chart is not None:
+                _show_altair_chart(recommendation_chart)
+            else:
+                st.info("The meta-model did not return a chartable ranking for this dataset.")
+        elif benchmark_result:
+            st.subheader("Benchmark signal")
+            leaderboard_chart = _leaderboard_chart(benchmark_result["leaderboard"], benchmark_result["problem_type"])
+            if leaderboard_chart is not None:
+                _show_altair_chart(leaderboard_chart)
+            else:
+                st.info("The live benchmark did not return a chartable leaderboard.")
+        else:
+            st.info("Run either the meta-model or the live benchmark to populate this visual.")
+
+    with right_col:
+        st.subheader("Target profile")
+        target_chart = _target_distribution_chart(df[target_column], dataset_health["problem_type"])
+        if target_chart is not None:
+            _show_altair_chart(target_chart)
+        else:
+            missing_chart = _missingness_chart(dataset_health["missing_df"])
+            if missing_chart is not None:
+                _show_altair_chart(missing_chart)
+            else:
+                st.info("A chart preview is not available for the current target column.")
+
+
 def _build_export_payload(
     dataset_name: str,
     target_column: str,
@@ -1130,6 +1460,8 @@ def render_app() -> None:
                 f"{float(meta_result['model_metrics'].get('top_3_accuracy', 0.0)):.1%}",
             )
 
+        _render_command_center_visuals(df, target_column, dataset_health, benchmark_result, meta_result)
+
     with tabs[1]:
         st.markdown("### Recommendation Stack")
         st.markdown(
@@ -1143,7 +1475,7 @@ def render_app() -> None:
             if meta_result:
                 recommendation_chart = _recommendation_chart(meta_result["top_3"])
                 if recommendation_chart is not None:
-                    st.altair_chart(recommendation_chart, use_container_width=True)
+                    _show_altair_chart(recommendation_chart)
                 meta_table = pd.DataFrame(meta_result["top_3"])
                 meta_table["probability"] = meta_table["probability"].map(lambda value: f"{value:.2%}")
                 st.dataframe(meta_table, use_container_width=True, hide_index=True)
@@ -1155,7 +1487,7 @@ def render_app() -> None:
             if benchmark_result:
                 leaderboard_chart = _leaderboard_chart(benchmark_result["leaderboard"], benchmark_result["problem_type"])
                 if leaderboard_chart is not None:
-                    st.altair_chart(leaderboard_chart, use_container_width=True)
+                    _show_altair_chart(leaderboard_chart)
                 display_columns = (
                     ["model", "confidence", "accuracy", "f1_score"]
                     if benchmark_result["problem_type"] == "classification"
@@ -1204,7 +1536,7 @@ def render_app() -> None:
             if target_chart is None:
                 st.info("Target distribution could not be visualized.")
             else:
-                st.altair_chart(target_chart, use_container_width=True)
+                _show_altair_chart(target_chart)
 
         with chart_right:
             st.subheader("Column missingness")
@@ -1212,7 +1544,7 @@ def render_app() -> None:
             if missing_chart is None:
                 st.success("No missing values were detected by column.")
             else:
-                st.altair_chart(missing_chart, use_container_width=True)
+                _show_altair_chart(missing_chart)
 
         if dataset_health["high_cardinality_columns"]:
             st.info("High-cardinality columns: " + ", ".join(dataset_health["high_cardinality_columns"][:8]))
@@ -1235,7 +1567,7 @@ def render_app() -> None:
                 if importance_chart is None:
                     st.info("Feature importance is not available for the current best benchmark model.")
                 else:
-                    st.altair_chart(importance_chart, use_container_width=True)
+                    _show_altair_chart(importance_chart)
             else:
                 st.info("Run the live benchmark to unlock feature importance diagnostics.")
 
@@ -1246,22 +1578,16 @@ def render_app() -> None:
                 if heatmap is None:
                     st.info("A correlation heatmap needs at least two numeric columns.")
                 else:
-                    st.altair_chart(heatmap, use_container_width=True)
+                    _show_altair_chart(heatmap)
             else:
                 st.info("Run the live benchmark to unlock correlation diagnostics.")
 
         if benchmark_result:
             st.subheader("Evaluation view")
             if benchmark_result["problem_type"] == "classification":
-                st.altair_chart(
-                    _confusion_matrix_chart(benchmark_result["y_test"], benchmark_result["best_predictions"]),
-                    use_container_width=True,
-                )
+                _show_altair_chart(_confusion_matrix_chart(benchmark_result["y_test"], benchmark_result["best_predictions"]))
             else:
-                st.altair_chart(
-                    _regression_plot(benchmark_result["y_test"], benchmark_result["best_predictions"]),
-                    use_container_width=True,
-                )
+                _show_altair_chart(_regression_plot(benchmark_result["y_test"], benchmark_result["best_predictions"]))
 
             if payload.get("show_prediction_sample", True):
                 st.subheader("Prediction sample")
