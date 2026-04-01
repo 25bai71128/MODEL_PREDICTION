@@ -9,9 +9,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
+from meta_recommender.config import MODEL_DIR, MODEL_PATH, SCALER_PATH
 from meta_recommender.logging_utils import setup_logging
-from meta_recommender.pipeline import recommend_for_dataframe
+from meta_recommender.pipeline import recommend_for_dataframe, run_training_pipeline
 from meta_recommender.predictor import MetaModelPredictor
+import logging
+
+logger = logging.getLogger(__name__)
 
 setup_logging()
 
@@ -22,8 +26,30 @@ st.caption("Upload a tabular dataset and get the top model recommendations with 
 
 @st.cache_resource
 def load_predictor() -> MetaModelPredictor:
-    """Load the trained meta-model once per Streamlit session."""
-    return MetaModelPredictor.load()
+    """Load the trained meta-model, training artifacts only when missing."""
+    try:
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+        if not MODEL_PATH.exists():
+            logger.info("Model not found, training now...")
+            predictor, _ = run_training_pipeline()
+            if predictor is None or not MODEL_PATH.exists():
+                raise RuntimeError("Training completed without creating models/meta_model.joblib.")
+            logger.info("Model saved successfully")
+            return predictor
+
+        if not SCALER_PATH.exists():
+            logger.info("Scaler artifact not found, training now...")
+            predictor, _ = run_training_pipeline()
+            if predictor is None or not MODEL_PATH.exists():
+                raise RuntimeError("Training completed without creating model artifacts.")
+            logger.info("Model saved successfully")
+            return predictor
+
+        return MetaModelPredictor.load()
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Unable to load or train the meta-model: %s", exc)
+        raise RuntimeError(f"Unable to load or train the meta-model: {exc}") from exc
 
 
 uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
