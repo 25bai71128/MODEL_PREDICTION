@@ -1,57 +1,155 @@
 # Meta-Learning Model Recommender
 
-Production-grade Python project that learns from multiple OpenML datasets and recommends the most suitable machine learning model for new tabular datasets.
+Production-ready meta-learning system that learns from OpenML datasets, ranks candidate ML models probabilistically, and serves recommendations through both CLI and Streamlit.
 
-## Features
+## What It Does
 
-- Downloads and validates 20-50+ datasets from OpenML.
-- Handles invalid datasets safely (missing target, empty data, duplicates, malformed records).
-- Performs robust preprocessing for mixed data types.
-- Extracts fixed-order meta-features from datasets.
-- Evaluates candidate base learners with cross-validation.
-- Creates a meta-dataset (`meta_X`, `meta_y`) and trains a `RandomForestClassifier` meta-model.
-- Supports top-1 and top-k recommendations.
-- Includes CLI for training and CSV-based prediction.
+- Builds a meta-dataset from many tabular datasets.
+- Extracts advanced meta-features including kurtosis, entropy, PCA variance, sparsity, and outlier percentage.
+- Evaluates candidate base learners with caching, timing, and timeout protection.
+- Trains a probabilistic meta-model that returns the top 3 recommended models with confidence scores.
+- Saves the trained meta-model and scaler for reuse in batch and web prediction flows.
+- Exposes a clean Streamlit UI for dataset upload and interactive recommendations.
+
+## Architecture
+
+```text
+                    +----------------------+
+                    |    OpenML Datasets   |
+                    +----------+-----------+
+                               |
+                               v
+                  +---------------------------+
+                  | Validation + Cleaning     |
+                  | data_loader.py            |
+                  +-------------+-------------+
+                                |
+                                v
+                  +---------------------------+
+                  | Meta-Feature Extraction   |
+                  | features.py               |
+                  +-------------+-------------+
+                                |
+                                v
+                  +---------------------------+
+                  | Base Model Benchmarking   |
+                  | evaluator.py              |
+                  +-------------+-------------+
+                                |
+                                v
+                  +---------------------------+
+                  | Meta-Dataset CSV          |
+                  | artifacts/meta_dataset.csv|
+                  +-------------+-------------+
+                                |
+                                v
+                  +---------------------------+
+                  | Meta-Model + Scaler       |
+                  | predictor.py              |
+                  +-------------+-------------+
+                                |
+               +----------------+----------------+
+               |                                 |
+               v                                 v
+   +-----------------------+        +--------------------------+
+   | CLI / main.py         |        | Streamlit Web App        |
+   +-----------------------+        +--------------------------+
+```
 
 ## Project Structure
 
 ```text
 src/meta_recommender/
-  data_loader.py      # OpenML ingestion + validation
-  features.py         # cleaning, task detection, meta-feature extraction
-  evaluator.py        # candidate model evaluation
-  predictor.py        # meta-model training + inference + persistence
-  pipeline.py         # orchestration and CLI logic
-  cli.py              # console entrypoint
+  config.py
+  data_loader.py
+  evaluator.py
+  features.py
+  logging_utils.py
+  pipeline.py
+  predictor.py
+main.py
+streamlit_app.py
+evaluate_meta_model.py
+requirements.txt
 ```
 
 ## Installation
 
 ```bash
+pip install -r requirements.txt
 pip install -e .
 ```
 
-## Usage
-
-### Train meta-model
+## Training
 
 ```bash
-meta-recommender --train --openml-limit 30
+meta-recommender --train --openml-limit 30 --n-jobs 2
 ```
 
-### Recommend model for a new CSV
+Artifacts produced:
+
+- `models/meta_model.joblib`
+- `models/meta_scaler.joblib`
+- `artifacts/meta_dataset.csv`
+- `artifacts/meta_model_metrics.json`
+- `artifacts/evaluation_cache.joblib`
+- `logs.txt`
+
+## CLI Usage
 
 ```bash
-meta-recommender --predict-csv /path/to/new_dataset.csv
+python main.py --file data.csv --target target_column
 ```
 
 Output includes:
+
 - best model
-- top 3 models with probabilities
-- extracted meta-features
+- top 3 ranked models
+- dataset summary
+
+## Streamlit App
+
+Run locally with:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Features:
+
+- CSV upload
+- manual target column selection
+- dataset summary
+- detected problem type
+- optional meta-feature debug panel
+- top 3 model probability chart
+- loading spinner and user-facing error messages
+
+## Performance Check
+
+```bash
+python evaluate_meta_model.py
+```
+
+This prints:
+
+- meta-model accuracy
+- meta-model top-3 accuracy
+
+## Streamlit Cloud Deployment
+
+1. Push the repository to GitHub.
+2. Ensure `requirements.txt` is present at repo root.
+3. In Streamlit Cloud, set the app entry point to `streamlit_app.py`.
+4. Add a deployment link here after publishing: `DEPLOYMENT_LINK_PLACEHOLDER`
+
+## Screenshots
+
+- Add homepage screenshot here
+- Add prediction result screenshot here
 
 ## Notes
 
-- For prediction from CSV without explicit target column, the pipeline extracts structural meta-features and class-imbalance defaults to 1.0.
-- Regression uses negative RMSE scorer convention from scikit-learn (`higher is better` when less negative).
-- Model evaluation is protected with timeout and exception handling.
+- All failures during dataset loading, feature extraction, or model training are logged to `logs.txt`.
+- Per-model training and inference times are stored in the generated meta-dataset.
+- Candidate model evaluation is cached to reduce recomputation across training runs.

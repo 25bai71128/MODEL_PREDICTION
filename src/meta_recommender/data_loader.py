@@ -6,10 +6,10 @@ import logging
 from dataclasses import dataclass
 from typing import Iterator
 
-import openml
 import pandas as pd
 
 from .config import DEFAULT_OPENML_SIZE, MAX_DATASET_ROWS, RANDOM_STATE
+from .logging_utils import log_exception
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +86,8 @@ def _sample_if_large(X: pd.DataFrame, y: pd.Series, max_rows: int = MAX_DATASET_
 
 def load_openml_datasets(limit: int = DEFAULT_OPENML_SIZE) -> Iterator[DatasetBundle]:
     """Yield valid dataset bundles from OpenML, skipping invalid records safely."""
+    import openml
+
     datasets = openml.datasets.list_datasets(output_format="dataframe")
 
     if "NumberOfInstances" in datasets.columns:
@@ -120,5 +122,5 @@ def load_openml_datasets(limit: int = DEFAULT_OPENML_SIZE) -> Iterator[DatasetBu
             logger.info("Loaded dataset %s (%s) with shape %s", did, name, X.shape)
             yield DatasetBundle(dataset_id=did, name=name, X=X, y=y)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Skipping dataset %s (%s): %s", did, name, exc)
+            log_exception(logger, "dataset loading", name, exc)
             continue

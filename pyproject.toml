@@ -14,7 +14,9 @@ dependencies = [
   "scikit-learn",
   "xgboost",
   "openml",
-  "joblib"
+  "joblib",
+  "streamlit",
+  "tqdm"
 ]
 
 [project.scripts]
