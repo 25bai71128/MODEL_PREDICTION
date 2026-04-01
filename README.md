@@ -117,12 +117,13 @@ streamlit run streamlit_app.py
 
 Features:
 
-- CSV upload
-- manual target column selection
-- dataset summary
-- detected problem type
-- optional meta-feature debug panel
-- top 3 model probability chart
+- CSV upload plus bundled demo dataset mode
+- hybrid analysis that compares the trained meta-model with a live holdout benchmark
+- richer dataset health checks for missingness, duplicates, readiness score, and target balance
+- model recommendation charts, leaderboard tables, and feature-importance diagnostics
+- confusion matrix or regression fit views based on task type
+- optional meta-feature profile and prediction sample table
+- JSON report export and leaderboard CSV download
 - loading spinner and user-facing error messages
 
 ## Performance Check

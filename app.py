@@ -1,9 +1,18 @@
-"""Fast Streamlit app for lightweight ML model recommendation."""
+"""Hybrid Streamlit app for live benchmarking and meta-model recommendation."""
 
 from __future__ import annotations
 
+import json
+import sys
+from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 from typing import Any
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+SRC_DIR = PROJECT_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 import altair as alt
 import numpy as np
@@ -19,17 +28,15 @@ from sklearn.ensemble import (
 )
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.metrics import (
-    accuracy_score,
-    confusion_matrix,
-    f1_score,
-    mean_squared_error,
-    r2_score,
-)
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+
+from meta_recommender.features import detect_task_type
+from meta_recommender.pipeline import recommend_for_dataframe
+from meta_recommender.predictor import MetaModelPredictor
 
 try:
     from xgboost import XGBClassifier, XGBRegressor
@@ -39,21 +46,187 @@ except Exception:  # noqa: BLE001
     HAS_XGBOOST = False
 
 
-st.set_page_config(page_title="ML Model Recommender", layout="wide")
+APP_TITLE = "Model Recommendation Studio"
+APP_SUBTITLE = (
+    "A hybrid ML cockpit that pairs fast benchmark results with a trained meta-model, "
+    "data-health checks, and exportable decision reports."
+)
+DEMO_DATA_PATH = PROJECT_ROOT / "tmp" / "iris_test.csv"
+DEFAULT_TEST_SIZE = 0.2
+DEFAULT_RANDOM_STATE = 42
 
 
-def detect_problem_type(target: pd.Series) -> str:
-    """Infer whether the uploaded task is classification or regression."""
-    y = target.dropna()
-    if y.empty:
-        return "classification"
-    if pd.api.types.is_object_dtype(y) or pd.api.types.is_categorical_dtype(y) or pd.api.types.is_bool_dtype(y):
-        return "classification"
-    unique_count = y.nunique(dropna=True)
-    unique_ratio = unique_count / max(len(y), 1)
-    if unique_count <= 20 and unique_ratio < 0.2:
-        return "classification"
-    return "regression"
+def _inject_styles() -> None:
+    """Apply a custom visual language for the Streamlit UI."""
+    st.markdown(
+        """
+        <style>
+        :root {
+            --bg: #f3efe7;
+            --panel: rgba(255, 252, 246, 0.9);
+            --ink: #172026;
+            --muted: #51616c;
+            --accent: #0f766e;
+            --border: rgba(23, 32, 38, 0.08);
+        }
+
+        .stApp {
+            background:
+                radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 34%),
+                radial-gradient(circle at top right, rgba(180, 83, 9, 0.10), transparent 28%),
+                linear-gradient(180deg, #f8f4eb 0%, #eef4f2 100%);
+            color: var(--ink);
+        }
+
+        div[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, rgba(251, 247, 239, 0.98), rgba(241, 248, 246, 0.98));
+            border-right: 1px solid var(--border);
+        }
+
+        .hero-shell {
+            background: linear-gradient(135deg, rgba(23, 32, 38, 0.95), rgba(15, 118, 110, 0.92));
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 1.6rem 1.5rem;
+            color: #f9fafb;
+            box-shadow: 0 18px 44px rgba(23, 32, 38, 0.18);
+            margin-bottom: 1rem;
+        }
+
+        .hero-kicker {
+            font-size: 0.8rem;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            opacity: 0.75;
+            margin-bottom: 0.6rem;
+            font-family: "Trebuchet MS", "Verdana", sans-serif;
+        }
+
+        .hero-title {
+            font-size: 2.1rem;
+            line-height: 1.05;
+            margin: 0 0 0.55rem 0;
+            font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+            font-weight: 700;
+        }
+
+        .hero-copy {
+            max-width: 58rem;
+            color: rgba(249, 250, 251, 0.88);
+            font-size: 1rem;
+            line-height: 1.55;
+            margin: 0;
+            font-family: "Trebuchet MS", "Verdana", sans-serif;
+        }
+
+        .mini-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+            gap: 0.8rem;
+            margin: 1rem 0 1.2rem 0;
+        }
+
+        .mini-card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 1rem;
+            box-shadow: 0 10px 24px rgba(23, 32, 38, 0.06);
+        }
+
+        .mini-card h4 {
+            margin: 0 0 0.35rem 0;
+            font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+            color: var(--ink);
+        }
+
+        .mini-card p,
+        .section-copy,
+        .callout span {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.92rem;
+            line-height: 1.45;
+            font-family: "Trebuchet MS", "Verdana", sans-serif;
+        }
+
+        .callout {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-left: 5px solid var(--accent);
+            border-radius: 18px;
+            padding: 1rem 1rem 0.95rem 1rem;
+            box-shadow: 0 10px 22px rgba(23, 32, 38, 0.06);
+        }
+
+        .callout strong {
+            display: block;
+            margin-bottom: 0.35rem;
+            color: var(--ink);
+            font-family: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+        }
+
+        .pill-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.75rem;
+        }
+
+        .pill {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 999px;
+            padding: 0.35rem 0.75rem;
+            color: #f8fafc;
+            font-size: 0.85rem;
+            font-family: "Trebuchet MS", "Verdana", sans-serif;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_hero() -> None:
+    """Render the top hero band."""
+    st.markdown(
+        f"""
+        <div class="hero-shell">
+            <div class="hero-kicker">Hybrid ML Recommender</div>
+            <div class="hero-title">{APP_TITLE}</div>
+            <p class="hero-copy">{APP_SUBTITLE}</p>
+            <div class="pill-row">
+                <span class="pill">Live benchmark leaderboard</span>
+                <span class="pill">Meta-model top 3 ranking</span>
+                <span class="pill">Data quality diagnostics</span>
+                <span class="pill">Export-ready report</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_uploaded_dataframe(file_bytes: bytes) -> pd.DataFrame:
+    """Load an uploaded CSV into a DataFrame."""
+    return pd.read_csv(BytesIO(file_bytes))
+
+
+@st.cache_data(show_spinner=False)
+def load_demo_dataframe() -> pd.DataFrame:
+    """Load the bundled demo dataset."""
+    return pd.read_csv(DEMO_DATA_PATH)
+
+
+@st.cache_resource(show_spinner=False)
+def load_meta_predictor() -> MetaModelPredictor | None:
+    """Load the persisted meta-model artifacts if available."""
+    try:
+        return MetaModelPredictor.load()
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def guess_target_column(df: pd.DataFrame) -> str:
@@ -75,14 +248,8 @@ def guess_target_column(df: pd.DataFrame) -> str:
     return df.columns[-1]
 
 
-@st.cache_data(show_spinner=False)
-def load_uploaded_dataframe(file_bytes: bytes) -> pd.DataFrame:
-    """Load the uploaded CSV into a DataFrame."""
-    return pd.read_csv(BytesIO(file_bytes))
-
-
 def build_preprocessor(X: pd.DataFrame) -> ColumnTransformer:
-    """Create a quick preprocessing pipeline for mixed tabular data."""
+    """Create a preprocessing pipeline for mixed tabular data."""
     numeric_columns = X.select_dtypes(include=[np.number, "bool"]).columns.tolist()
     categorical_columns = [column for column in X.columns if column not in numeric_columns]
 
@@ -156,8 +323,22 @@ def _candidate_models(problem_type: str) -> list[tuple[str, Any]]:
 
 
 def _build_pipeline(model: Any, X: pd.DataFrame) -> Pipeline:
-    """Attach preprocessing to a model."""
+    """Attach preprocessing to a model clone."""
     return Pipeline([("preprocessor", build_preprocessor(X)), ("model", clone(model))])
+
+
+def _align_label_types(y_true: pd.Series, y_pred: pd.Series | np.ndarray) -> tuple[pd.Series, pd.Series]:
+    """Make classification labels comparable for metrics and plots."""
+    true_series = pd.Series(y_true).reset_index(drop=True)
+    pred_series = pd.Series(y_pred).reset_index(drop=True)
+
+    if getattr(true_series, "dtype", None) != getattr(pred_series, "dtype", None):
+        try:
+            pred_series = pred_series.astype(true_series.dtype)
+        except (TypeError, ValueError):
+            true_series = true_series.astype(str)
+            pred_series = pred_series.astype(str)
+    return true_series, pred_series
 
 
 def _fit_and_predict_model(
@@ -173,7 +354,7 @@ def _fit_and_predict_model(
 
     if model_name == "XGBoost" and isinstance(model, XGBClassifier):
         label_encoder = LabelEncoder()
-        y_train_encoded = label_encoder.fit_transform(y_train.astype(str))
+        y_train_encoded = label_encoder.fit_transform(y_train)
         pipeline.fit(X_train, y_train_encoded)
         y_pred_encoded = pipeline.predict(X_test)
         y_pred = label_encoder.inverse_transform(y_pred_encoded.astype(int))
@@ -187,8 +368,9 @@ def _fit_and_predict_model(
 def _score_predictions(problem_type: str, y_true: pd.Series, y_pred: np.ndarray) -> dict[str, float]:
     """Compute task-appropriate metrics."""
     if problem_type == "classification":
-        accuracy = accuracy_score(y_true, y_pred)
-        f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+        y_true_aligned, y_pred_aligned = _align_label_types(y_true, y_pred)
+        accuracy = accuracy_score(y_true_aligned, y_pred_aligned)
+        f1 = f1_score(y_true_aligned, y_pred_aligned, average="weighted", zero_division=0)
         return {"primary_score": float(f1), "accuracy": float(accuracy), "f1_score": float(f1)}
 
     rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
@@ -197,8 +379,45 @@ def _score_predictions(problem_type: str, y_true: pd.Series, y_pred: np.ndarray)
     return {"primary_score": primary, "rmse": rmse, "r2_score": r2}
 
 
+def _split_dataset(
+    X: pd.DataFrame,
+    y: pd.Series,
+    problem_type: str,
+    test_size: float,
+    random_state: int,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """Split the dataset with a fallback when stratification is too tight."""
+    stratify = None
+    if problem_type == "classification" and y.nunique(dropna=True) > 1:
+        class_counts = y.value_counts(dropna=True)
+        if not class_counts.empty and class_counts.min() >= 2:
+            stratify = y
+
+    try:
+        return train_test_split(
+            X,
+            y,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=stratify,
+        )
+    except ValueError:
+        return train_test_split(
+            X,
+            y,
+            test_size=test_size,
+            random_state=random_state,
+            stratify=None,
+        )
+
+
 @st.cache_data(show_spinner=False)
-def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
+def benchmark_models(
+    df: pd.DataFrame,
+    target_column: str,
+    test_size: float = DEFAULT_TEST_SIZE,
+    random_state: int = DEFAULT_RANDOM_STATE,
+) -> dict[str, Any]:
     """Benchmark lightweight models on the uploaded dataset."""
     if df.empty:
         raise ValueError("The uploaded CSV is empty.")
@@ -207,7 +426,7 @@ def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
 
     working_df = df.copy()
     y = working_df.pop(target_column)
-    problem_type = detect_problem_type(y)
+    problem_type = detect_task_type(y)
 
     valid_index = y.notna()
     working_df = working_df.loc[valid_index].reset_index(drop=True)
@@ -222,18 +441,17 @@ def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
     if problem_type == "classification" and y.nunique(dropna=True) < 2:
         raise ValueError("Classification requires at least two target classes.")
 
-    stratify = y if problem_type == "classification" and y.nunique(dropna=True) > 1 else None
-    X_train, X_test, y_train, y_test = train_test_split(
+    X_train, X_test, y_train, y_test = _split_dataset(
         working_df,
         y,
-        test_size=0.2,
-        random_state=42,
-        stratify=stratify,
+        problem_type=problem_type,
+        test_size=test_size,
+        random_state=random_state,
     )
 
     leaderboard: list[dict[str, Any]] = []
     fitted_models: dict[str, Pipeline] = {}
-    predictions: dict[str, np.ndarray] = {}
+    predictions: dict[str, pd.Series] = {}
     failures: list[str] = []
 
     for model_name, model in _candidate_models(problem_type):
@@ -246,10 +464,16 @@ def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
                 X_test=X_test,
                 y_train=y_train,
             )
-            metrics = _score_predictions(problem_type, y_test, y_pred)
+            if problem_type == "classification":
+                _, aligned_pred = _align_label_types(y_test, y_pred)
+                y_pred_series = aligned_pred
+            else:
+                y_pred_series = pd.Series(y_pred).reset_index(drop=True)
+
+            metrics = _score_predictions(problem_type, y_test.reset_index(drop=True), y_pred_series.to_numpy())
             leaderboard.append({"model": model_name, **metrics})
             fitted_models[model_name] = pipeline
-            predictions[model_name] = y_pred
+            predictions[model_name] = y_pred_series.reset_index(drop=True)
         except Exception as exc:  # noqa: BLE001
             failures.append(f"{model_name}: {exc}")
 
@@ -257,15 +481,19 @@ def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
         raise RuntimeError("All candidate models failed to train on this dataset.")
 
     leaderboard_df = pd.DataFrame(leaderboard).sort_values("primary_score", ascending=False).reset_index(drop=True)
-    leaderboard_df["confidence"] = leaderboard_df["primary_score"] / leaderboard_df["primary_score"].sum()
+    confidence_denominator = leaderboard_df["primary_score"].clip(lower=0).sum()
+    if confidence_denominator > 0:
+        leaderboard_df["confidence"] = leaderboard_df["primary_score"].clip(lower=0) / confidence_denominator
+    else:
+        leaderboard_df["confidence"] = 0.0
     leaderboard_df["confidence"] = leaderboard_df["confidence"].fillna(0.0).round(4)
 
     best_model_name = str(leaderboard_df.iloc[0]["model"])
     best_pipeline = fitted_models[best_model_name]
     best_predictions = predictions[best_model_name]
-
-    transformed_feature_names = best_pipeline.named_steps["preprocessor"].get_feature_names_out()
     best_estimator = best_pipeline.named_steps["model"]
+    transformed_feature_names = best_pipeline.named_steps["preprocessor"].get_feature_names_out()
+
     importance_df = pd.DataFrame(columns=["feature", "importance"])
     if hasattr(best_estimator, "feature_importances_"):
         importance_df = pd.DataFrame(
@@ -275,7 +503,10 @@ def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
             }
         ).sort_values("importance", ascending=False).head(15)
     elif hasattr(best_estimator, "coef_"):
-        coefficients = np.ravel(np.abs(best_estimator.coef_))
+        coefficients = np.abs(np.asarray(best_estimator.coef_))
+        if coefficients.ndim > 1:
+            coefficients = coefficients.mean(axis=0)
+        coefficients = np.ravel(coefficients)
         importance_df = pd.DataFrame(
             {
                 "feature": transformed_feature_names[: len(coefficients)],
@@ -284,19 +515,23 @@ def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
         ).sort_values("importance", ascending=False).head(15)
 
     numeric_df = df.select_dtypes(include=[np.number]).copy()
-    if target_column in numeric_df.columns:
-        corr_df = numeric_df.corr(numeric_only=True).round(2)
-    else:
-        corr_df = numeric_df.corr(numeric_only=True).round(2)
+    corr_df = numeric_df.corr(numeric_only=True).round(2) if not numeric_df.empty else pd.DataFrame()
 
+    y_test_out = y_test.reset_index(drop=True)
+    if problem_type == "classification":
+        y_test_out, best_predictions = _align_label_types(y_test_out, best_predictions)
+
+    prediction_sample = pd.DataFrame({"actual": y_test_out, "predicted": best_predictions}).head(50)
     return {
         "problem_type": problem_type,
         "target_column": target_column,
         "leaderboard": leaderboard_df,
         "best_model": best_model_name,
         "best_confidence": float(leaderboard_df.iloc[0]["confidence"]),
-        "y_test": y_test.reset_index(drop=True),
-        "best_predictions": pd.Series(best_predictions).reset_index(drop=True),
+        "best_metrics": leaderboard_df.iloc[0].to_dict(),
+        "y_test": y_test_out,
+        "best_predictions": best_predictions.reset_index(drop=True),
+        "prediction_sample": prediction_sample.reset_index(drop=True),
         "importance_df": importance_df.reset_index(drop=True),
         "correlation_df": corr_df,
         "failures": failures,
@@ -304,8 +539,176 @@ def benchmark_models(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
             "rows": int(df.shape[0]),
             "columns": int(df.shape[1]),
             "missing_values": int(df.isna().sum().sum()),
+            "train_rows": int(len(X_train)),
+            "test_rows": int(len(X_test)),
         },
     }
+
+
+def _summarize_dataset_health(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
+    """Build a user-facing health summary for the uploaded dataset."""
+    rows, columns = df.shape
+    missing_values = int(df.isna().sum().sum())
+    total_cells = max(rows * max(columns, 1), 1)
+    missing_ratio = float(missing_values / total_cells)
+    duplicate_rows = int(df.duplicated().sum())
+    numeric_columns = df.select_dtypes(include=[np.number, "bool"]).columns.tolist()
+    categorical_columns = [column for column in df.columns if column not in numeric_columns]
+    memory_mb = float(df.memory_usage(deep=True).sum() / (1024 * 1024))
+    high_cardinality = [
+        column
+        for column in categorical_columns
+        if df[column].nunique(dropna=True) > min(40, max(10, rows // 10))
+    ]
+
+    target_series = df[target_column] if target_column in df.columns else pd.Series(dtype="float64")
+    target_missing = int(target_series.isna().sum()) if not target_series.empty else 0
+    problem_type = detect_task_type(target_series) if not target_series.empty else "classification"
+    target_unique = int(target_series.nunique(dropna=True)) if not target_series.empty else 0
+
+    class_balance_ratio = None
+    if problem_type == "classification" and not target_series.empty:
+        counts = target_series.value_counts(dropna=True)
+        if not counts.empty and counts.max() > 0:
+            class_balance_ratio = float(counts.min() / counts.max())
+
+    warnings: list[str] = []
+    if rows < 50:
+        warnings.append("Small datasets can make leaderboard scores noisy and unstable.")
+    if missing_ratio >= 0.15:
+        warnings.append("Missing values are high; models may be ranking the imputation strategy as much as the signal.")
+    if duplicate_rows > 0:
+        warnings.append("Duplicate rows were detected and may inflate evaluation quality.")
+    if high_cardinality:
+        warnings.append("High-cardinality categorical columns may create a wide encoded feature space.")
+    if problem_type == "classification" and class_balance_ratio is not None and class_balance_ratio < 0.35:
+        warnings.append("Class imbalance is significant, so accuracy alone may be misleading.")
+    if target_missing > 0:
+        warnings.append("Rows with missing target values will be dropped before benchmarking.")
+
+    penalties = 0
+    penalties += 20 if rows < 50 else 0
+    penalties += 18 if missing_ratio >= 0.15 else 8 if missing_ratio >= 0.05 else 0
+    penalties += 10 if duplicate_rows > 0 else 0
+    penalties += 10 if high_cardinality else 0
+    penalties += 12 if class_balance_ratio is not None and class_balance_ratio < 0.35 else 0
+    penalties += 10 if target_missing > 0 else 0
+    readiness_score = max(5, 100 - penalties)
+
+    missing_df = (
+        df.isna()
+        .mean()
+        .sort_values(ascending=False)
+        .reset_index()
+        .rename(columns={"index": "column", 0: "missing_ratio"})
+    )
+    missing_df = missing_df[missing_df["missing_ratio"] > 0].head(12)
+
+    dtype_df = (
+        df.dtypes.astype(str)
+        .reset_index()
+        .rename(columns={"index": "column", 0: "dtype"})
+        .assign(non_null=lambda frame: [int(df[column].notna().sum()) for column in frame["column"]])
+    )
+
+    return {
+        "rows": rows,
+        "columns": columns,
+        "missing_values": missing_values,
+        "missing_ratio": missing_ratio,
+        "duplicate_rows": duplicate_rows,
+        "numeric_columns": len(numeric_columns),
+        "categorical_columns": len(categorical_columns),
+        "memory_mb": memory_mb,
+        "target_missing": target_missing,
+        "target_unique": target_unique,
+        "problem_type": problem_type,
+        "class_balance_ratio": class_balance_ratio,
+        "high_cardinality_columns": high_cardinality,
+        "warnings": warnings,
+        "readiness_score": readiness_score,
+        "missing_df": missing_df,
+        "dtype_df": dtype_df,
+    }
+
+
+def _target_distribution_chart(target: pd.Series, problem_type: str) -> alt.Chart | None:
+    """Visualize the target distribution."""
+    clean_target = target.dropna().reset_index(drop=True)
+    if clean_target.empty:
+        return None
+
+    if problem_type == "classification":
+        distribution = (
+            clean_target.astype(str)
+            .value_counts()
+            .rename_axis("label")
+            .reset_index(name="count")
+            .head(12)
+        )
+        return (
+            alt.Chart(distribution)
+            .mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5)
+            .encode(
+                x=alt.X("label:N", sort="-y", title="Class"),
+                y=alt.Y("count:Q", title="Rows"),
+                color=alt.Color("count:Q", scale=alt.Scale(scheme="tealblues"), legend=None),
+                tooltip=["label", "count"],
+            )
+            .properties(height=300)
+        )
+
+    distribution = pd.DataFrame({"target": pd.to_numeric(clean_target, errors="coerce")}).dropna()
+    if distribution.empty:
+        return None
+    return (
+        alt.Chart(distribution)
+        .mark_bar(opacity=0.85)
+        .encode(
+            x=alt.X("target:Q", bin=alt.Bin(maxbins=25), title="Target value"),
+            y=alt.Y("count():Q", title="Rows"),
+            color=alt.value("#0f766e"),
+        )
+        .properties(height=300)
+    )
+
+
+def _recommendation_chart(top_models: list[dict[str, Any]]) -> alt.Chart | None:
+    """Visualize the meta-model recommendation ranking."""
+    if not top_models:
+        return None
+    chart_df = pd.DataFrame(top_models)
+    return (
+        alt.Chart(chart_df)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .encode(
+            x=alt.X("model:N", sort="-y", title="Model"),
+            y=alt.Y("probability:Q", title="Probability", axis=alt.Axis(format=".0%")),
+            color=alt.Color("probability:Q", scale=alt.Scale(scheme="goldgreen"), legend=None),
+            tooltip=["model", alt.Tooltip("probability:Q", format=".2%")],
+        )
+        .properties(height=300)
+    )
+
+
+def _leaderboard_chart(leaderboard_df: pd.DataFrame, problem_type: str) -> alt.Chart | None:
+    """Visualize the live benchmark leaderboard."""
+    if leaderboard_df.empty:
+        return None
+    value_field = "f1_score" if problem_type == "classification" else "r2_score"
+    if value_field not in leaderboard_df.columns:
+        value_field = "primary_score"
+    return (
+        alt.Chart(leaderboard_df)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .encode(
+            x=alt.X("model:N", sort="-y", title="Model"),
+            y=alt.Y(f"{value_field}:Q", title=value_field.replace("_", " ").title()),
+            color=alt.Color(f"{value_field}:Q", scale=alt.Scale(scheme="teals"), legend=None),
+            tooltip=["model", alt.Tooltip(f"{value_field}:Q", format=".4f")],
+        )
+        .properties(height=300)
+    )
 
 
 def _heatmap_from_correlation(corr_df: pd.DataFrame) -> alt.Chart | None:
@@ -333,20 +736,41 @@ def _feature_importance_chart(importance_df: pd.DataFrame) -> alt.Chart | None:
         return None
     return (
         alt.Chart(importance_df)
-        .mark_bar()
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
         .encode(
             x=alt.X("importance:Q", title="Importance"),
             y=alt.Y("feature:N", sort="-x", title="Feature"),
+            color=alt.Color("importance:Q", scale=alt.Scale(scheme="greens"), legend=None),
             tooltip=["feature", "importance"],
         )
         .properties(height=360)
     )
 
 
+def _missingness_chart(missing_df: pd.DataFrame) -> alt.Chart | None:
+    """Visualize per-column missingness."""
+    if missing_df.empty:
+        return None
+    return (
+        alt.Chart(missing_df)
+        .mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6)
+        .encode(
+            x=alt.X("column:N", sort="-y", title="Column"),
+            y=alt.Y("missing_ratio:Q", axis=alt.Axis(format=".0%"), title="Missing ratio"),
+            color=alt.Color("missing_ratio:Q", scale=alt.Scale(scheme="oranges"), legend=None),
+            tooltip=["column", alt.Tooltip("missing_ratio:Q", format=".2%")],
+        )
+        .properties(height=300)
+    )
+
+
 def _confusion_matrix_chart(y_true: pd.Series, y_pred: pd.Series) -> alt.Chart:
     """Build a confusion matrix heatmap."""
-    labels = sorted(pd.unique(pd.concat([y_true, y_pred], ignore_index=True)))
-    matrix = confusion_matrix(y_true, y_pred, labels=labels)
+    true_series, pred_series = _align_label_types(y_true, y_pred)
+    display_true = true_series.astype(str)
+    display_pred = pred_series.astype(str)
+    labels = sorted(pd.unique(pd.concat([display_true, display_pred], ignore_index=True)))
+    matrix = confusion_matrix(display_true, display_pred, labels=labels)
     matrix_df = pd.DataFrame(matrix, index=labels, columns=labels)
     melted = matrix_df.reset_index(names="actual").melt("actual", var_name="predicted", value_name="count")
     return (
@@ -355,10 +779,10 @@ def _confusion_matrix_chart(y_true: pd.Series, y_pred: pd.Series) -> alt.Chart:
         .encode(
             x=alt.X("predicted:N", title="Predicted"),
             y=alt.Y("actual:N", title="Actual"),
-            color=alt.Color("count:Q", scale=alt.Scale(scheme="blues")),
+            color=alt.Color("count:Q", scale=alt.Scale(scheme="teals")),
             tooltip=["actual", "predicted", "count"],
         )
-        .properties(height=320)
+        .properties(height=340)
     )
 
 
@@ -372,90 +796,524 @@ def _regression_plot(y_true: pd.Series, y_pred: pd.Series) -> alt.Chart:
     reference_df = pd.DataFrame({"x": limits, "y": limits})
     scatter = (
         alt.Chart(chart_df)
-        .mark_circle(size=70, opacity=0.75)
+        .mark_circle(size=72, opacity=0.74, color="#0f766e")
         .encode(x=alt.X("actual:Q", title="Actual"), y=alt.Y("predicted:Q", title="Predicted"))
     )
-    line = alt.Chart(reference_df).mark_line(color="red").encode(x="x:Q", y="y:Q")
-    return (scatter + line).properties(height=320)
+    line = alt.Chart(reference_df).mark_line(color="#b45309", strokeDash=[5, 5]).encode(x="x:Q", y="y:Q")
+    return (scatter + line).properties(height=340)
+
+
+def _meta_feature_frame(meta_features: dict[str, float]) -> pd.DataFrame:
+    """Format meta-features for display."""
+    feature_df = pd.DataFrame(
+        [{"feature": feature.replace("_", " ").title(), "value": float(value)} for feature, value in meta_features.items()]
+    )
+    return feature_df.sort_values("value", ascending=False).reset_index(drop=True)
+
+
+def _build_analysis_brief(
+    dataset_health: dict[str, Any],
+    benchmark_result: dict[str, Any] | None,
+    meta_result: dict[str, Any] | None,
+) -> list[str]:
+    """Create short, high-signal observations for the command center."""
+    points = [
+        (
+            f"Dataset readiness is {dataset_health['readiness_score']}/100 with "
+            f"{dataset_health['missing_ratio']:.1%} missingness and {dataset_health['duplicate_rows']} duplicate rows."
+        )
+    ]
+    if meta_result:
+        top_entry = meta_result["top_3"][0]
+        points.append(
+            f"The meta-model favors {top_entry['model']} first with {top_entry['probability']:.1%} confidence."
+        )
+    if benchmark_result:
+        best_model = benchmark_result["best_model"]
+        score_label = "F1" if benchmark_result["problem_type"] == "classification" else "R2"
+        metric_field = "f1_score" if benchmark_result["problem_type"] == "classification" else "r2_score"
+        score_value = benchmark_result["best_metrics"].get(metric_field, benchmark_result["best_metrics"]["primary_score"])
+        points.append(f"On the live holdout split, {best_model} leads with {score_label} {float(score_value):.3f}.")
+    if meta_result and benchmark_result:
+        meta_best = meta_result["best_model"]
+        live_best = benchmark_result["best_model"]
+        if meta_best == live_best:
+            points.append("The trained meta-model and the live benchmark agree on the strongest candidate.")
+        else:
+            points.append(
+                f"The meta-model suggests {meta_best}, while the holdout benchmark currently prefers {live_best}; "
+                "that disagreement is useful signal when validating deployment choices."
+            )
+    return points
+
+
+def _build_export_payload(
+    dataset_name: str,
+    target_column: str,
+    dataset_health: dict[str, Any],
+    benchmark_result: dict[str, Any] | None,
+    meta_result: dict[str, Any] | None,
+    analysis_mode: str,
+    test_size: float,
+    random_state: int,
+) -> dict[str, Any]:
+    """Create a JSON-safe export structure for the current report."""
+    payload: dict[str, Any] = {
+        "generated_at_utc": datetime.now(UTC).isoformat(),
+        "dataset_name": dataset_name,
+        "target_column": target_column,
+        "analysis_mode": analysis_mode,
+        "test_size": test_size,
+        "random_state": random_state,
+        "dataset_health": {
+            "rows": dataset_health["rows"],
+            "columns": dataset_health["columns"],
+            "missing_values": dataset_health["missing_values"],
+            "missing_ratio": dataset_health["missing_ratio"],
+            "duplicate_rows": dataset_health["duplicate_rows"],
+            "numeric_columns": dataset_health["numeric_columns"],
+            "categorical_columns": dataset_health["categorical_columns"],
+            "memory_mb": dataset_health["memory_mb"],
+            "target_missing": dataset_health["target_missing"],
+            "target_unique": dataset_health["target_unique"],
+            "problem_type": dataset_health["problem_type"],
+            "readiness_score": dataset_health["readiness_score"],
+            "warnings": dataset_health["warnings"],
+            "high_cardinality_columns": dataset_health["high_cardinality_columns"],
+            "class_balance_ratio": dataset_health["class_balance_ratio"],
+        },
+    }
+
+    if meta_result:
+        payload["meta_model"] = {
+            "best_model": meta_result["best_model"],
+            "top_3": meta_result["top_3"],
+            "dataset_summary": meta_result["dataset_summary"],
+            "problem_type": meta_result["problem_type"],
+            "meta_features": meta_result["meta_features"],
+        }
+
+    if benchmark_result:
+        payload["benchmark"] = {
+            "best_model": benchmark_result["best_model"],
+            "best_metrics": benchmark_result["best_metrics"],
+            "problem_type": benchmark_result["problem_type"],
+            "summary": benchmark_result["summary"],
+            "leaderboard": benchmark_result["leaderboard"].to_dict(orient="records"),
+            "failures": benchmark_result["failures"],
+            "prediction_sample": benchmark_result["prediction_sample"].head(20).to_dict(orient="records"),
+        }
+    return payload
+
+
+def _analysis_signature(
+    dataset_name: str,
+    df: pd.DataFrame,
+    target_column: str,
+    analysis_mode: str,
+    test_size: float,
+    random_state: int,
+) -> str:
+    """Generate a lightweight signature so stale results can be detected."""
+    raw_signature = {
+        "dataset_name": dataset_name,
+        "rows": int(df.shape[0]),
+        "columns": int(df.shape[1]),
+        "target_column": target_column,
+        "analysis_mode": analysis_mode,
+        "test_size": round(float(test_size), 3),
+        "random_state": int(random_state),
+        "missing_values": int(df.isna().sum().sum()),
+    }
+    return json.dumps(raw_signature, sort_keys=True)
+
+
+def _load_current_dataset(source: str, uploaded_file: Any) -> tuple[pd.DataFrame | None, str]:
+    """Resolve the active dataset source."""
+    if source == "Demo dataset":
+        return load_demo_dataframe(), DEMO_DATA_PATH.name
+    if uploaded_file is None:
+        return None, ""
+    return load_uploaded_dataframe(uploaded_file.getvalue()), uploaded_file.name
 
 
 def render_app() -> None:
     """Render the Streamlit application."""
-    st.title("ML Model Recommendation Studio")
-    st.caption("Upload a CSV and get a fast leaderboard of lightweight models without blocking the app.")
+    st.set_page_config(page_title=APP_TITLE, layout="wide", initial_sidebar_state="expanded")
+    _inject_styles()
+    _render_hero()
 
-    uploaded_file = st.file_uploader("Upload CSV dataset", type=["csv"])
-    if uploaded_file is None:
-        st.info("Upload a CSV file to start.")
+    st.session_state.setdefault("analysis_payload", None)
+
+    with st.sidebar:
+        st.header("Analysis Setup")
+        source = st.radio("Dataset source", options=["Upload CSV", "Demo dataset"])
+        uploaded_file = None
+        if source == "Upload CSV":
+            uploaded_file = st.file_uploader("Upload CSV dataset", type=["csv"])
+            st.caption("Streamlit uploads are usually capped at 200 MB by default unless app config changes it.")
+        else:
+            st.caption(f"Using bundled sample dataset: `{DEMO_DATA_PATH.name}`")
+
+        df, dataset_name = _load_current_dataset(source, uploaded_file)
+
+        target_column = ""
+        if df is not None:
+            guessed_target = guess_target_column(df)
+            target_index = df.columns.get_loc(guessed_target)
+            target_column = st.selectbox("Target column", options=df.columns.tolist(), index=target_index)
+
+        analysis_mode = st.radio(
+            "Analysis mode",
+            options=["Hybrid", "Benchmark only", "Meta only"],
+            help="Hybrid runs both the live benchmark and the trained meta-model.",
+        )
+        test_size = st.slider("Holdout ratio", min_value=0.15, max_value=0.40, value=DEFAULT_TEST_SIZE, step=0.05)
+        random_state = st.number_input("Random seed", min_value=1, max_value=9999, value=DEFAULT_RANDOM_STATE, step=1)
+        show_meta_features = st.toggle("Show meta-feature panel", value=True)
+        show_prediction_sample = st.toggle("Show prediction sample", value=True)
+
+        run_analysis = st.button("Run analysis", type="primary", use_container_width=True, disabled=df is None)
+        clear_report = st.button("Clear report", use_container_width=True)
+
+        if clear_report:
+            st.session_state["analysis_payload"] = None
+
+    if df is None:
+        st.markdown(
+            """
+            <div class="mini-card-grid">
+                <div class="mini-card">
+                    <h4>Start Fast</h4>
+                    <p>Upload your own CSV or load the bundled iris demo to see the full workflow immediately.</p>
+                </div>
+                <div class="mini-card">
+                    <h4>Compare Two Brains</h4>
+                    <p>Use the trained meta-model for instant guidance, then validate it with a live benchmark leaderboard.</p>
+                </div>
+                <div class="mini-card">
+                    <h4>Ship Better Decisions</h4>
+                    <p>Review health checks, diagnostics, and export the final report instead of guessing from one score.</p>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.info("Choose a CSV in the sidebar or switch to the demo dataset to begin.")
         return
 
-    try:
-        df = load_uploaded_dataframe(uploaded_file.getvalue())
-        guessed_target = guess_target_column(df)
-        target_index = df.columns.get_loc(guessed_target)
-        target_column = st.selectbox("Detected target column", options=df.columns.tolist(), index=target_index)
+    dataset_health = _summarize_dataset_health(df, target_column)
+    signature = _analysis_signature(
+        dataset_name=dataset_name,
+        df=df,
+        target_column=target_column,
+        analysis_mode=analysis_mode,
+        test_size=test_size,
+        random_state=int(random_state),
+    )
 
-        summary_columns = st.columns(4)
-        summary_columns[0].metric("Rows", int(df.shape[0]))
-        summary_columns[1].metric("Columns", int(df.shape[1]))
-        summary_columns[2].metric("Missing Values", int(df.isna().sum().sum()))
-        summary_columns[3].metric("Detected Target", target_column)
+    summary_cols = st.columns(5)
+    summary_cols[0].metric("Rows", f"{dataset_health['rows']:,}")
+    summary_cols[1].metric("Columns", dataset_health["columns"])
+    summary_cols[2].metric("Problem Type", dataset_health["problem_type"].title())
+    summary_cols[3].metric("Missing", f"{dataset_health['missing_ratio']:.1%}")
+    summary_cols[4].metric("Readiness", f"{dataset_health['readiness_score']}/100")
 
-        preview_expander = st.expander("Dataset Preview", expanded=False)
-        with preview_expander:
-            st.dataframe(df.head(20), use_container_width=True)
+    preview_col, status_col = st.columns([1.5, 1.0], gap="large")
+    with preview_col:
+        with st.expander("Dataset preview", expanded=False):
+            st.dataframe(df.head(25), use_container_width=True)
 
-        if st.button("Analyze Dataset", type="primary"):
-            with st.spinner("Analyzing dataset and ranking candidate models..."):
-                result = benchmark_models(df, target_column)
+    with status_col:
+        warnings = dataset_health["warnings"]
+        if warnings:
+            st.warning("\n".join(f"- {warning}" for warning in warnings))
+        else:
+            st.success("No major health red flags were detected for the current target setup.")
 
-            st.subheader("Recommendation")
-            recommendation_columns = st.columns(3)
-            recommendation_columns[0].metric("Problem Type", result["problem_type"].title())
-            recommendation_columns[1].metric("Best Model", result["best_model"])
-            recommendation_columns[2].metric("Confidence", f"{result['best_confidence']:.1%}")
+    saved_payload = st.session_state.get("analysis_payload")
+    if saved_payload and saved_payload.get("signature") != signature:
+        st.info("Settings changed after the last run. Click `Run analysis` to refresh the report.")
 
-            st.subheader("Model Leaderboard")
-            leaderboard = result["leaderboard"].copy()
-            display_columns = ["model", "confidence", "accuracy", "f1_score"] if result["problem_type"] == "classification" else ["model", "confidence", "rmse", "r2_score"]
-            leaderboard = leaderboard[[column for column in display_columns if column in leaderboard.columns]]
-            st.dataframe(leaderboard, use_container_width=True)
+    if run_analysis:
+        meta_result: dict[str, Any] | None = None
+        benchmark_result: dict[str, Any] | None = None
+        meta_error = ""
 
-            if result["failures"]:
-                st.warning("Some models failed but results are still available.")
-                st.write(result["failures"])
+        with st.spinner("Analyzing dataset, generating recommendations, and building diagnostics..."):
+            if analysis_mode in {"Hybrid", "Meta only"}:
+                predictor = load_meta_predictor()
+                if predictor is None:
+                    meta_error = "Meta-model artifacts are missing or could not be loaded."
+                else:
+                    meta_result = recommend_for_dataframe(df, predictor, target_column=target_column)
+                    meta_result["model_metrics"] = predictor.metrics
 
-            viz_left, viz_right = st.columns(2)
+            if analysis_mode in {"Hybrid", "Benchmark only"}:
+                benchmark_result = benchmark_models(
+                    df,
+                    target_column=target_column,
+                    test_size=float(test_size),
+                    random_state=int(random_state),
+                )
 
-            with viz_left:
-                st.subheader("Feature Importance")
-                importance_chart = _feature_importance_chart(result["importance_df"])
+        st.session_state["analysis_payload"] = {
+            "signature": signature,
+            "dataset_name": dataset_name,
+            "target_column": target_column,
+            "analysis_mode": analysis_mode,
+            "test_size": float(test_size),
+            "random_state": int(random_state),
+            "dataset_health": dataset_health,
+            "meta_result": meta_result,
+            "benchmark_result": benchmark_result,
+            "meta_error": meta_error,
+            "show_meta_features": show_meta_features,
+            "show_prediction_sample": show_prediction_sample,
+        }
+
+    payload = st.session_state.get("analysis_payload")
+    if not payload or payload.get("signature") != signature:
+        st.markdown(
+            """
+            <div class="callout">
+                <strong>Ready when you are</strong>
+                <span>
+                    The dataset is loaded. Run the analysis to compare the trained recommender with a live holdout benchmark,
+                    review health signals, and export a decision report.
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return
+
+    meta_result = payload.get("meta_result")
+    benchmark_result = payload.get("benchmark_result")
+    meta_error = payload.get("meta_error", "")
+    analysis_brief = _build_analysis_brief(dataset_health, benchmark_result, meta_result)
+
+    tabs = st.tabs(["Command Center", "Recommendations", "Data Quality", "Diagnostics", "Export"])
+
+    with tabs[0]:
+        st.markdown("### Operating Summary")
+        st.markdown(
+            '<p class="section-copy">A concise read on where the dataset stands and what the app currently prefers.</p>',
+            unsafe_allow_html=True,
+        )
+
+        top_cols = st.columns(4)
+        top_cols[0].metric("Target", payload["target_column"])
+        top_cols[1].metric("Mode", payload["analysis_mode"])
+        top_cols[2].metric("Duplicates", dataset_health["duplicate_rows"])
+        top_cols[3].metric("Memory", f"{dataset_health['memory_mb']:.2f} MB")
+
+        for point in analysis_brief:
+            st.markdown(
+                f"""
+                <div class="callout" style="margin-top:0.7rem;">
+                    <strong>Insight</strong>
+                    <span>{point}</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        if meta_error:
+            st.warning(meta_error)
+
+        if meta_result and meta_result.get("model_metrics"):
+            metric_cols = st.columns(2)
+            metric_cols[0].metric("Meta-model Accuracy", f"{float(meta_result['model_metrics'].get('accuracy', 0.0)):.1%}")
+            metric_cols[1].metric(
+                "Meta-model Top-3 Accuracy",
+                f"{float(meta_result['model_metrics'].get('top_3_accuracy', 0.0)):.1%}",
+            )
+
+    with tabs[1]:
+        st.markdown("### Recommendation Stack")
+        st.markdown(
+            '<p class="section-copy">Use the meta-model for fast prior guidance and the benchmark leaderboard for dataset-specific validation.</p>',
+            unsafe_allow_html=True,
+        )
+
+        left_col, right_col = st.columns(2, gap="large")
+        with left_col:
+            st.subheader("Meta-model Ranking")
+            if meta_result:
+                recommendation_chart = _recommendation_chart(meta_result["top_3"])
+                if recommendation_chart is not None:
+                    st.altair_chart(recommendation_chart, use_container_width=True)
+                meta_table = pd.DataFrame(meta_result["top_3"])
+                meta_table["probability"] = meta_table["probability"].map(lambda value: f"{value:.2%}")
+                st.dataframe(meta_table, use_container_width=True, hide_index=True)
+            else:
+                st.info("Meta-model recommendations are not available for this run.")
+
+        with right_col:
+            st.subheader("Live Benchmark Leaderboard")
+            if benchmark_result:
+                leaderboard_chart = _leaderboard_chart(benchmark_result["leaderboard"], benchmark_result["problem_type"])
+                if leaderboard_chart is not None:
+                    st.altair_chart(leaderboard_chart, use_container_width=True)
+                display_columns = (
+                    ["model", "confidence", "accuracy", "f1_score"]
+                    if benchmark_result["problem_type"] == "classification"
+                    else ["model", "confidence", "rmse", "r2_score"]
+                )
+                leaderboard = benchmark_result["leaderboard"][
+                    [column for column in display_columns if column in benchmark_result["leaderboard"].columns]
+                ].copy()
+                if "confidence" in leaderboard.columns:
+                    leaderboard["confidence"] = leaderboard["confidence"].map(lambda value: f"{value:.2%}")
+                st.dataframe(leaderboard, use_container_width=True, hide_index=True)
+            else:
+                st.info("Live benchmarking was skipped for this run.")
+
+        if meta_result and benchmark_result:
+            if meta_result["best_model"] == benchmark_result["best_model"]:
+                st.success(
+                    f"Both engines agree on `{benchmark_result['best_model']}`, which is a strong sign for the current dataset."
+                )
+            else:
+                st.info(
+                    f"Meta-model choice: `{meta_result['best_model']}`. Live benchmark winner: `{benchmark_result['best_model']}`."
+                )
+
+        if benchmark_result and benchmark_result["failures"]:
+            st.warning("A few benchmark models failed, but the report is still usable.")
+            st.write(benchmark_result["failures"])
+
+    with tabs[2]:
+        st.markdown("### Data Quality")
+        st.markdown(
+            '<p class="section-copy">A quick audit of target stability, missingness, and schema shape before you trust the rankings.</p>',
+            unsafe_allow_html=True,
+        )
+
+        health_cols = st.columns(4)
+        health_cols[0].metric("Missing values", dataset_health["missing_values"])
+        health_cols[1].metric("Target classes/levels", dataset_health["target_unique"])
+        health_cols[2].metric("Numeric columns", dataset_health["numeric_columns"])
+        health_cols[3].metric("Categorical columns", dataset_health["categorical_columns"])
+
+        chart_left, chart_right = st.columns(2, gap="large")
+        with chart_left:
+            st.subheader("Target distribution")
+            target_chart = _target_distribution_chart(df[target_column], dataset_health["problem_type"])
+            if target_chart is None:
+                st.info("Target distribution could not be visualized.")
+            else:
+                st.altair_chart(target_chart, use_container_width=True)
+
+        with chart_right:
+            st.subheader("Column missingness")
+            missing_chart = _missingness_chart(dataset_health["missing_df"])
+            if missing_chart is None:
+                st.success("No missing values were detected by column.")
+            else:
+                st.altair_chart(missing_chart, use_container_width=True)
+
+        if dataset_health["high_cardinality_columns"]:
+            st.info("High-cardinality columns: " + ", ".join(dataset_health["high_cardinality_columns"][:8]))
+
+        with st.expander("Column types and coverage", expanded=False):
+            st.dataframe(dataset_health["dtype_df"], use_container_width=True, hide_index=True)
+
+    with tabs[3]:
+        st.markdown("### Diagnostics")
+        st.markdown(
+            '<p class="section-copy">Detailed visuals that help explain why the recommendation looks the way it does.</p>',
+            unsafe_allow_html=True,
+        )
+
+        diag_left, diag_right = st.columns(2, gap="large")
+        with diag_left:
+            st.subheader("Feature importance")
+            if benchmark_result:
+                importance_chart = _feature_importance_chart(benchmark_result["importance_df"])
                 if importance_chart is None:
-                    st.info("Feature importance is not available for the selected best model.")
+                    st.info("Feature importance is not available for the current best benchmark model.")
                 else:
                     st.altair_chart(importance_chart, use_container_width=True)
+            else:
+                st.info("Run the live benchmark to unlock feature importance diagnostics.")
 
-            with viz_right:
-                st.subheader("Dataset Correlation Heatmap")
-                heatmap = _heatmap_from_correlation(result["correlation_df"])
+        with diag_right:
+            st.subheader("Correlation heatmap")
+            if benchmark_result:
+                heatmap = _heatmap_from_correlation(benchmark_result["correlation_df"])
                 if heatmap is None:
-                    st.info("Correlation heatmap needs at least two numeric columns.")
+                    st.info("A correlation heatmap needs at least two numeric columns.")
                 else:
                     st.altair_chart(heatmap, use_container_width=True)
+            else:
+                st.info("Run the live benchmark to unlock correlation diagnostics.")
 
-            st.subheader("Evaluation View")
-            if result["problem_type"] == "classification":
+        if benchmark_result:
+            st.subheader("Evaluation view")
+            if benchmark_result["problem_type"] == "classification":
                 st.altair_chart(
-                    _confusion_matrix_chart(result["y_test"], result["best_predictions"]),
+                    _confusion_matrix_chart(benchmark_result["y_test"], benchmark_result["best_predictions"]),
                     use_container_width=True,
                 )
             else:
                 st.altair_chart(
-                    _regression_plot(result["y_test"], result["best_predictions"]),
+                    _regression_plot(benchmark_result["y_test"], benchmark_result["best_predictions"]),
                     use_container_width=True,
                 )
-    except Exception as exc:  # noqa: BLE001
-        st.error(f"Unable to analyze the uploaded dataset: {exc}")
+
+            if payload.get("show_prediction_sample", True):
+                st.subheader("Prediction sample")
+                st.dataframe(benchmark_result["prediction_sample"], use_container_width=True, hide_index=True)
+
+        if payload.get("show_meta_features", True) and meta_result:
+            st.subheader("Meta-feature profile")
+            st.dataframe(_meta_feature_frame(meta_result["meta_features"]), use_container_width=True, hide_index=True)
+
+    with tabs[4]:
+        st.markdown("### Export")
+        st.markdown(
+            '<p class="section-copy">Carry the recommendation forward as a JSON report or a benchmark CSV snapshot.</p>',
+            unsafe_allow_html=True,
+        )
+
+        export_payload = _build_export_payload(
+            dataset_name=payload["dataset_name"],
+            target_column=payload["target_column"],
+            dataset_health=dataset_health,
+            benchmark_result=benchmark_result,
+            meta_result=meta_result,
+            analysis_mode=payload["analysis_mode"],
+            test_size=payload["test_size"],
+            random_state=payload["random_state"],
+        )
+
+        export_cols = st.columns(2)
+        export_cols[0].download_button(
+            "Download JSON report",
+            data=json.dumps(export_payload, indent=2),
+            file_name=f"{Path(payload['dataset_name']).stem}_analysis_report.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+
+        leaderboard_csv = benchmark_result["leaderboard"].to_csv(index=False) if benchmark_result else "model\n"
+        export_cols[1].download_button(
+            "Download leaderboard CSV",
+            data=leaderboard_csv,
+            file_name=f"{Path(payload['dataset_name']).stem}_leaderboard.csv",
+            mime="text/csv",
+            disabled=benchmark_result is None,
+            use_container_width=True,
+        )
+
+        st.code(
+            f"python main.py --file {payload['dataset_name']} --target {payload['target_column']}",
+            language="bash",
+        )
+        st.caption("The CLI command above mirrors the target selection for batch runs outside the UI.")
+
 
 if __name__ == "__main__":
     render_app()
