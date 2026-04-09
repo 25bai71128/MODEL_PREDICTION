@@ -1,8 +1,9 @@
-"""Hybrid Streamlit app for live benchmarking and meta-model recommendation."""
+"""AutoML Assistant: Intelligent Model Recommendation and Analysis."""
 
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from datetime import UTC, datetime
 from io import BytesIO
@@ -31,9 +32,12 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder, StandardScaler, MinMaxScaler
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.datasets import load_iris
+from sklearn.svm import SVC, SVR
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
+from sklearn.naive_bayes import GaussianNB
 
 from meta_recommender.features import detect_task_type
 from meta_recommender.pipeline import recommend_for_dataframe
@@ -41,17 +45,15 @@ from meta_recommender.predictor import MetaModelPredictor
 
 try:
     from xgboost import XGBClassifier, XGBRegressor
-
     HAS_XGBOOST = True
-except Exception:  # noqa: BLE001
+except Exception:
     HAS_XGBOOST = False
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-APP_TITLE = "Model Recommendation Studio"
-APP_SUBTITLE = (
-    "A hybrid ML cockpit that pairs fast benchmark results with a trained meta-model, "
-    "data-health checks, and exportable decision reports."
-)
+APP_TITLE = "AutoML Assistant"
+APP_SUBTITLE = "Intelligent model recommendation and data analysis."
 DEMO_DATASET_NAME = "iris_dataset.csv"
 DEFAULT_TEST_SIZE = 0.2
 DEFAULT_RANDOM_STATE = 42
@@ -514,6 +516,353 @@ def load_meta_predictor() -> MetaModelPredictor | None:
         return MetaModelPredictor.load()
     except Exception:  # noqa: BLE001
         return None
+
+
+def run_eda(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
+    """Run comprehensive EDA and generate recommendations."""
+    logger.info("Running EDA on dataset with %d rows, %d columns", len(df), len(df.columns))
+    
+    eda_results = {
+        "missing_values": {},
+        "correlations": {},
+        "outliers": {},
+        "distributions": {},
+        "recommendations": {}
+    }
+    
+    # Missing values analysis
+    missing_pct = (df.isnull().sum() / len(df)) * 100
+    eda_results["missing_values"] = missing_pct.to_dict()
+    
+    recommendations = []
+    for col, pct in missing_pct.items():
+        if pct > 40:
+            recommendations.append(f"Drop column '{col}' ({pct:.1f}% missing)")
+        elif pct > 0:
+            recommendations.append(f"Impute '{col}' ({pct:.1f}% missing)")
+    
+    # Correlation analysis
+    numeric_df = df.select_dtypes(include=[np.number])
+    if not numeric_df.empty:
+        corr_matrix = numeric_df.corr()
+        high_corr = []
+        for i in range(len(corr_matrix.columns)):
+            for j in range(i+1, len(corr_matrix.columns)):
+                if abs(corr_matrix.iloc[i, j]) > 0.9:
+                    high_corr.append((corr_matrix.columns[i], corr_matrix.columns[j], corr_matrix.iloc[i, j]))
+        eda_results["correlations"] = {"high_corr_pairs": high_corr}
+        for col1, col2, corr in high_corr:
+            recommendations.append(f"Consider dropping one of highly correlated features: '{col1}' and '{col2}' (corr={corr:.2f})")
+    
+    # Outlier detection using IQR
+    outlier_info = {}
+    for col in numeric_df.columns:
+        if col != target_column:
+            Q1 = numeric_df[col].quantile(0.25)
+            Q3 = numeric_df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            outliers = ((numeric_df[col] < (Q1 - 1.5 * IQR)) | (numeric_df[col] > (Q3 + 1.5 * IQR))).sum()
+            outlier_pct = (outliers / len(numeric_df)) * 100
+            outlier_info[col] = {"count": outliers, "percentage": outlier_pct}
+            if outlier_pct > 5:
+                recommendations.append(f"Consider removing outliers in '{col}' ({outlier_pct:.1f}% detected)")
+    
+    eda_results["outliers"] = outlier_info
+    
+    # Feature importance (quick RF)
+    if len(numeric_df.columns) > 1 and target_column in df.columns:
+        from sklearn.ensemble import RandomForestClassifier
+        X = numeric_df.drop(columns=[target_column], errors='ignore')
+        y = df[target_column]
+        if len(X.columns) > 0:
+            rf = RandomForestClassifier(n_estimators=50, random_state=42)
+            rf.fit(X, y)
+            importance = dict(zip(X.columns, rf.feature_importances_))
+            eda_results["feature_importance"] = importance
+    
+    eda_results["recommendations"] = recommendations
+    return eda_results
+
+
+def preprocess_data(df: pd.DataFrame, target_column: str, options: dict) -> tuple[pd.DataFrame, dict]:
+    """Apply preprocessing based on options."""
+    logger.info("Preprocessing data with options: %s", options)
+    
+    processed_df = df.copy()
+    preprocessing_log = []
+    
+    # Handle missing values
+    if options.get("impute_missing", True):
+        numeric_cols = processed_df.select_dtypes(include=[np.number]).columns
+        categorical_cols = processed_df.select_dtypes(include=['object', 'category']).columns
+        
+        if len(numeric_cols) > 0:
+            imputer_num = SimpleImputer(strategy='mean')
+            processed_df[numeric_cols] = imputer_num.fit_transform(processed_df[numeric_cols])
+            preprocessing_log.append("Imputed missing values in numeric columns with mean")
+        
+        if len(categorical_cols) > 0:
+            imputer_cat = SimpleImputer(strategy='most_frequent')
+            processed_df[categorical_cols] = imputer_cat.fit_transform(processed_df[categorical_cols])
+            preprocessing_log.append("Imputed missing values in categorical columns with mode")
+    
+    # Remove outliers
+    if options.get("remove_outliers", False):
+        numeric_df = processed_df.select_dtypes(include=[np.number])
+        for col in numeric_df.columns:
+            if col != target_column:
+                Q1 = numeric_df[col].quantile(0.25)
+                Q3 = numeric_df[col].quantile(0.75)
+                IQR = Q3 - Q1
+                mask = (numeric_df[col] >= (Q1 - 1.5 * IQR)) & (numeric_df[col] <= (Q3 + 1.5 * IQR))
+                processed_df = processed_df[mask]
+        preprocessing_log.append("Removed outliers using IQR method")
+    
+    # Scaling
+    scaler_type = options.get("scaler", "none")
+    if scaler_type != "none":
+        numeric_cols = processed_df.select_dtypes(include=[np.number]).columns.tolist()
+        if target_column in numeric_cols:
+            numeric_cols.remove(target_column)
+        
+        if scaler_type == "standard":
+            scaler = StandardScaler()
+            preprocessing_log.append("Applied StandardScaler to numeric features")
+        elif scaler_type == "minmax":
+            scaler = MinMaxScaler()
+            preprocessing_log.append("Applied MinMaxScaler to numeric features")
+        
+        if numeric_cols:
+            processed_df[numeric_cols] = scaler.fit_transform(processed_df[numeric_cols])
+    
+    # Encoding
+    if options.get("encode_categorical", True):
+        categorical_cols = processed_df.select_dtypes(include=['object', 'category']).columns
+        if len(categorical_cols) > 0:
+            encoder = OneHotEncoder(sparse=False, drop='first')
+            encoded = encoder.fit_transform(processed_df[categorical_cols])
+            encoded_df = pd.DataFrame(encoded, columns=encoder.get_feature_names_out(categorical_cols))
+            processed_df = processed_df.drop(columns=categorical_cols).reset_index(drop=True)
+            processed_df = pd.concat([processed_df, encoded_df], axis=1)
+            preprocessing_log.append("Applied one-hot encoding to categorical features")
+    
+    return processed_df, {"log": preprocessing_log}
+
+
+def get_candidate_models(problem_type: str) -> dict[str, Any]:
+    """Get expanded list of candidate models."""
+    models = {
+        "Logistic Regression": LogisticRegression(max_iter=1000, random_state=42),
+        "Decision Tree": DecisionTreeClassifier(random_state=42) if problem_type == "classification" else DecisionTreeRegressor(random_state=42),
+        "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42) if problem_type == "classification" else RandomForestRegressor(n_estimators=100, random_state=42),
+        "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, random_state=42) if problem_type == "classification" else GradientBoostingRegressor(n_estimators=100, random_state=42),
+        "SVM": SVC(random_state=42) if problem_type == "classification" else SVR(),
+        "KNN": KNeighborsClassifier() if problem_type == "classification" else KNeighborsRegressor(),
+        "Naive Bayes": GaussianNB() if problem_type == "classification" else None,
+    }
+    if HAS_XGBOOST:
+        models["XGBoost"] = XGBClassifier(n_estimators=100, random_state=42) if problem_type == "classification" else XGBRegressor(n_estimators=100, random_state=42)
+    
+    return {k: v for k, v in models.items() if v is not None}
+
+
+def train_models(df: pd.DataFrame, target_column: str, test_size: float, random_state: int, selected_models: list[str]) -> dict[str, Any]:
+    """Train and evaluate selected models."""
+    logger.info("Training models: %s", selected_models)
+    
+    if df.empty or target_column not in df.columns:
+        raise ValueError("Invalid dataset or target column")
+    
+    working_df = df.copy()
+    y = working_df.pop(target_column)
+    problem_type = detect_task_type(y)
+    
+    valid_index = y.notna()
+    working_df = working_df.loc[valid_index].reset_index(drop=True)
+    y = y.loc[valid_index].reset_index(drop=True)
+    
+    if len(working_df) < 5:
+        raise ValueError("Dataset must have at least 5 rows")
+    
+    X_train, X_test, y_train, y_test = train_test_split(working_df, y, test_size=test_size, random_state=random_state, stratify=y if problem_type == "classification" else None)
+    
+    results = {}
+    for model_name in selected_models:
+        try:
+            model = get_candidate_models(problem_type)[model_name]
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
+            
+            if problem_type == "classification":
+                acc = accuracy_score(y_test, y_pred)
+                f1 = f1_score(y_test, y_pred, average='weighted')
+                results[model_name] = {"accuracy": acc, "f1_score": f1, "model": model}
+            else:
+                mse = mean_squared_error(y_test, y_pred)
+                r2 = r2_score(y_test, y_pred)
+                results[model_name] = {"mse": mse, "r2_score": r2, "model": model}
+        except Exception as e:
+            logger.error("Error training %s: %s", model_name, str(e))
+            results[model_name] = {"error": str(e)}
+    
+    return {"results": results, "problem_type": problem_type, "X_test": X_test, "y_test": y_test}
+
+
+def generate_recommendations(results: dict, eda_results: dict) -> dict[str, Any]:
+    """Generate model recommendations based on results."""
+    if not results["results"]:
+        return {"best_model": None, "reasoning": "No models trained successfully"}
+    
+    problem_type = results["problem_type"]
+    metric = "f1_score" if problem_type == "classification" else "r2_score"
+    
+    valid_results = {k: v for k, v in results["results"].items() if "error" not in v}
+    if not valid_results:
+        return {"best_model": None, "reasoning": "All models failed to train"}
+    
+    best_model = max(valid_results, key=lambda x: valid_results[x][metric])
+    score = valid_results[best_model][metric]
+    
+    reasoning = f"Best model is {best_model} with {metric} of {score:.3f}"
+    if eda_results.get("correlations", {}).get("high_corr_pairs"):
+        reasoning += ". Dataset has correlated features, tree-based models may perform well."
+    if any(pct > 5 for pct in eda_results.get("outliers", {}).values() if isinstance(pct, dict) and "percentage" in pct):
+        reasoning += ". Outliers detected, consider robust models."
+    
+    return {"best_model": best_model, "reasoning": reasoning, "score": score}
+
+
+def export_results(results: dict, eda_results: dict, df: pd.DataFrame, best_model: str) -> None:
+    """Provide download options for results."""
+    st.subheader("Export Results")
+    
+    # EDA Report
+    eda_text = f"EDA Report\n\nMissing Values:\n{json.dumps(eda_results['missing_values'], indent=2)}\n\nRecommendations:\n" + "\n".join(eda_results['recommendations'])
+    st.download_button("Download EDA Report", eda_text, "eda_report.txt")
+    
+    # Model Results
+    results_df = pd.DataFrame.from_dict({k: v for k, v in results["results"].items() if "error" not in v}, orient='index')
+    csv = results_df.to_csv()
+    st.download_button("Download Model Results", csv, "model_results.csv")
+    
+    # Best Model
+    if best_model and "model" in results["results"][best_model]:
+        import pickle
+        model_bytes = pickle.dumps(results["results"][best_model]["model"])
+        st.download_button("Download Best Model", model_bytes, "best_model.pkl")
+
+
+# Removed old render_app
+    pass
+    
+    # Sidebar for inputs
+    with st.sidebar:
+        st.header("Dataset Setup")
+        source = st.radio("Dataset source", ["Upload CSV", "Demo dataset"])
+        
+        df = None
+        dataset_name = ""
+        if source == "Upload CSV":
+            uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+            if uploaded_file:
+                df = pd.read_csv(uploaded_file)
+                dataset_name = uploaded_file.name
+        else:
+            df = load_demo_dataframe()
+            dataset_name = DEMO_DATASET_NAME
+        
+        target_column = ""
+        if df is not None and not df.empty:
+            target_column = st.selectbox("Target column", df.columns.tolist(), index=df.columns.tolist().index(guess_target_column(df)) if guess_target_column(df) in df.columns else 0)
+        
+        # Advanced settings
+        with st.expander("Advanced Settings"):
+            test_size = st.slider("Test size", 0.1, 0.5, DEFAULT_TEST_SIZE)
+            random_state = st.number_input("Random seed", value=DEFAULT_RANDOM_STATE)
+            
+            st.subheader("Preprocessing")
+            impute_missing = st.checkbox("Impute missing values", True)
+            remove_outliers = st.checkbox("Remove outliers", False)
+            scaler = st.selectbox("Scaling", ["none", "standard", "minmax"])
+            encode_categorical = st.checkbox("Encode categorical", True)
+            
+            st.subheader("Model Selection")
+            problem_type = detect_task_type(df[target_column]) if df is not None and target_column else "classification"
+            all_models = list(get_candidate_models(problem_type).keys())
+            selected_models = st.multiselect("Models to train", all_models, default=all_models[:5])
+        
+        run_analysis = st.button("Run Analysis", type="primary")
+    
+    if df is not None and run_analysis:
+        with st.spinner("Running analysis..."):
+            try:
+                # EDA
+                eda_results = run_eda(df, target_column)
+                
+                # Preprocessing
+                preprocess_options = {
+                    "impute_missing": impute_missing,
+                    "remove_outliers": remove_outliers,
+                    "scaler": scaler,
+                    "encode_categorical": encode_categorical
+                }
+                processed_df, preprocess_log = preprocess_data(df, target_column, preprocess_options)
+                
+                # Train models
+                results = train_models(processed_df, target_column, test_size, random_state, selected_models)
+                
+                # Recommendations
+                recommendations = generate_recommendations(results, eda_results)
+                
+                # Display results
+                st.header("Dataset Insights")
+                st.write(f"Rows: {len(df)}, Columns: {len(df.columns)}")
+                st.write(f"Problem type: {results['problem_type']}")
+                
+                st.header("EDA Summary")
+                st.subheader("Missing Values")
+                st.json(eda_results["missing_values"])
+                st.subheader("Recommendations")
+                for rec in eda_results["recommendations"]:
+                    st.write(f"- {rec}")
+                
+                st.header("Preprocessing Applied")
+                for log in preprocess_log["log"]:
+                    st.write(f"- {log}")
+                
+                st.header("Model Leaderboard")
+                results_df = pd.DataFrame.from_dict({k: v for k, v in results["results"].items() if "error" not in v}, orient='index')
+                st.dataframe(results_df)
+                
+                if recommendations["best_model"]:
+                    st.header("Best Model")
+                    st.write(f"**{recommendations['best_model']}**")
+                    st.write(recommendations["reasoning"])
+                
+                # Meta-model insights
+                meta_predictor = load_meta_predictor()
+                if meta_predictor:
+                    st.header("Meta-Model Insights")
+                    try:
+                        meta_result = recommend_for_dataframe(processed_df, meta_predictor, target_column=target_column)
+                        st.write(f"Meta-model recommends: {meta_result.get('best_model', 'N/A')}")
+                        if "meta_model_metrics" in meta_result:
+                            st.json(meta_result["meta_model_metrics"])
+                    except Exception as e:
+                        st.warning(f"Meta-model failed: {str(e)}")
+                else:
+                    st.info("Meta-model artifacts not available. Train a meta-model first.")
+                
+                # Export
+                export_results(results, eda_results, processed_df, recommendations.get("best_model"))
+                
+            except Exception as e:
+                st.error(f"Analysis failed: {str(e)}")
+                logger.error("Analysis error", exc_info=True)
+
+
+if __name__ == "__main__":
+    render_app()
 
 
 def guess_target_column(df: pd.DataFrame) -> str:
