@@ -33,6 +33,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.datasets import load_iris
 
 from meta_recommender.features import detect_task_type
 from meta_recommender.pipeline import recommend_for_dataframe
@@ -51,7 +52,7 @@ APP_SUBTITLE = (
     "A hybrid ML cockpit that pairs fast benchmark results with a trained meta-model, "
     "data-health checks, and exportable decision reports."
 )
-DEMO_DATA_PATH = PROJECT_ROOT / "tmp" / "iris_test.csv"
+DEMO_DATASET_NAME = "iris_dataset.csv"
 DEFAULT_TEST_SIZE = 0.2
 DEFAULT_RANDOM_STATE = 42
 
@@ -500,7 +501,10 @@ def load_uploaded_dataframe(file_bytes: bytes) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def load_demo_dataframe() -> pd.DataFrame:
     """Load the bundled demo dataset."""
-    return pd.read_csv(DEMO_DATA_PATH)
+    iris = load_iris()
+    df = pd.DataFrame(iris.data, columns=iris.feature_names)
+    df['target'] = iris.target
+    return df
 
 
 @st.cache_resource(show_spinner=False)
@@ -719,8 +723,8 @@ def benchmark_models(
         raise ValueError("No valid rows remain after removing missing target values.")
     if working_df.shape[1] == 0:
         raise ValueError("No feature columns remain after removing the target column.")
-    if len(working_df) < 10:
-        raise ValueError("Please upload a dataset with at least 10 rows for a stable recommendation.")
+    if len(working_df) < 5:
+        raise ValueError("Dataset must have at least 5 rows for stable recommendation.")
     if problem_type == "classification" and y.nunique(dropna=True) < 2:
         raise ValueError("Classification requires at least two target classes.")
 
@@ -1261,7 +1265,7 @@ def _analysis_signature(
 def _load_current_dataset(source: str, uploaded_file: Any) -> tuple[pd.DataFrame | None, str]:
     """Resolve the active dataset source."""
     if source == "Demo dataset":
-        return load_demo_dataframe(), DEMO_DATA_PATH.name
+        return load_demo_dataframe(), DEMO_DATASET_NAME
     if uploaded_file is None:
         return None, ""
     return load_uploaded_dataframe(uploaded_file.getvalue()), uploaded_file.name
@@ -1283,7 +1287,7 @@ def render_app() -> None:
             uploaded_file = st.file_uploader("Upload CSV dataset", type=["csv"])
             st.caption("Streamlit uploads are usually capped at 200 MB by default unless app config changes it.")
         else:
-            st.caption(f"Using bundled sample dataset: `{DEMO_DATA_PATH.name}`")
+            st.caption(f"Using bundled sample dataset: `{DEMO_DATASET_NAME}`")
 
         df, dataset_name = _load_current_dataset(source, uploaded_file)
 
