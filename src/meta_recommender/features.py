@@ -139,6 +139,19 @@ def extract_meta_features(X: pd.DataFrame, y: pd.Series) -> dict[str, float]:
             stds = num_df.std(axis=0).replace(0, np.nan)
             z_scores = ((num_df - means) / stds).abs()
             outlier_percentage = float((z_scores > Z_SCORE_THRESHOLD).sum().sum() / max(n_total_cells, 1))
+            
+            feature_importance_var = 0.0
+            if num_df.shape[1] > 1:
+                try:
+                    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+                    if detect_task_type(y) == "classification":
+                        dt = DecisionTreeClassifier(max_depth=3, random_state=42).fit(num_df, y)
+                    else:
+                        dt = DecisionTreeRegressor(max_depth=3, random_state=42).fit(num_df, y)
+                    feature_importance_var = float(np.var(dt.feature_importances_))
+                except Exception as exc:  # noqa: BLE001
+                    log_exception(logger, "feature extraction", "feature_importance_var", exc)
+
         else:
             mean_variance = 0.0
             mean_skewness = 0.0
@@ -148,6 +161,7 @@ def extract_meta_features(X: pd.DataFrame, y: pd.Series) -> dict[str, float]:
             pca_var_1 = 0.0
             pca_var_2 = 0.0
             outlier_percentage = 0.0
+            feature_importance_var = 0.0
 
         class_imbalance_ratio = 1.0
         if detect_task_type(y) == "classification":
@@ -176,6 +190,7 @@ def extract_meta_features(X: pd.DataFrame, y: pd.Series) -> dict[str, float]:
             "pca_component_2_var": float(pca_var_2),
             "feature_sparsity": float(sparsity),
             "outlier_percentage": float(outlier_percentage),
+            "feature_importance_var": float(feature_importance_var),
             "class_imbalance_ratio": float(class_imbalance_ratio),
         }
         return {k: features.get(k, 0.0) for k in META_FEATURE_ORDER}

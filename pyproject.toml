@@ -16,7 +16,12 @@ dependencies = [
   "openml",
   "joblib",
   "streamlit",
-  "tqdm"
+  "tqdm",
+  "fastapi",
+  "uvicorn",
+  "python-multipart",
+  "shap",
+  "flaml"
 ]
 
 [project.scripts]

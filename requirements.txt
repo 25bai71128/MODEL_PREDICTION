@@ -6,3 +6,8 @@ openml
 joblib
 streamlit
 tqdm
+fastapi
+uvicorn
+python-multipart
+shap
+flaml

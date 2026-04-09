@@ -1377,7 +1377,7 @@ def render_app() -> None:
                     meta_error = "Meta-model artifacts are missing or could not be loaded."
                 else:
                     meta_result = recommend_for_dataframe(df, predictor, target_column=target_column)
-                    meta_result["model_metrics"] = predictor.metrics
+                    meta_result["model_metrics"] = meta_result.get("meta_model_metrics", predictor.metrics)
 
             if analysis_mode in {"Hybrid", "Benchmark only"}:
                 benchmark_result = benchmark_models(
@@ -1453,12 +1453,14 @@ def render_app() -> None:
             st.warning(meta_error)
 
         if meta_result and meta_result.get("model_metrics"):
-            metric_cols = st.columns(2)
+            metric_cols = st.columns(4)
             metric_cols[0].metric("Meta-model Accuracy", f"{float(meta_result['model_metrics'].get('accuracy', 0.0)):.1%}")
             metric_cols[1].metric(
                 "Meta-model Top-3 Accuracy",
                 f"{float(meta_result['model_metrics'].get('top_3_accuracy', 0.0)):.1%}",
             )
+            metric_cols[2].metric("Meta-model NDCG@3", f"{float(meta_result['model_metrics'].get('ndcg_at_3', 0.0)):.3f}")
+            metric_cols[3].metric("Meta-model MAP@3", f"{float(meta_result['model_metrics'].get('map_at_3', 0.0)):.3f}")
 
         _render_command_center_visuals(df, target_column, dataset_health, benchmark_result, meta_result)
 
@@ -1479,6 +1481,25 @@ def render_app() -> None:
                 meta_table = pd.DataFrame(meta_result["top_3"])
                 meta_table["probability"] = meta_table["probability"].map(lambda value: f"{value:.2%}")
                 st.dataframe(meta_table, use_container_width=True, hide_index=True)
+                if meta_result.get("recommendation_modes"):
+                    with st.expander("Accurate vs fast recommendation modes", expanded=False):
+                        mode_tables = st.columns(2)
+                        accurate_table = pd.DataFrame(meta_result["recommendation_modes"].get("accurate", []))
+                        fast_table = pd.DataFrame(meta_result["recommendation_modes"].get("fast", []))
+                        if not accurate_table.empty and "probability" in accurate_table.columns:
+                            accurate_table["probability"] = accurate_table["probability"].map(lambda value: f"{value:.2%}")
+                        if not fast_table.empty and "probability" in fast_table.columns:
+                            fast_table["probability"] = fast_table["probability"].map(lambda value: f"{value:.2%}")
+                        mode_tables[0].caption("Accurate mode")
+                        mode_tables[0].dataframe(accurate_table, use_container_width=True, hide_index=True)
+                        mode_tables[1].caption("Fast mode")
+                        mode_tables[1].dataframe(fast_table, use_container_width=True, hide_index=True)
+                if meta_result.get("explanation"):
+                    with st.expander("Why this model was recommended", expanded=False):
+                        explanation = meta_result["explanation"]
+                        top_features = pd.DataFrame(explanation.get("top_features", []))
+                        if not top_features.empty:
+                            st.dataframe(top_features, use_container_width=True, hide_index=True)
             else:
                 st.info("Meta-model recommendations are not available for this run.")
 
