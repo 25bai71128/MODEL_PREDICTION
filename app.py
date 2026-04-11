@@ -60,374 +60,220 @@ DEFAULT_RANDOM_STATE = 42
 
 
 def _inject_styles() -> None:
-    """Apply a custom visual language for the Streamlit UI."""
+    """Apply a modern dark UI theme inspired by chat interfaces and streaming UX."""
     st.markdown(
         """
         <style>
         :root {
-            --bg: #f4efe7;
-            --bg-alt: #fbf8f2;
-            --panel: rgba(255, 255, 255, 0.84);
-            --panel-strong: #fffdf9;
-            --ink: #101828;
-            --muted: #5b6472;
-            --accent: #0f766e;
-            --gold: #b7791f;
-            --line: rgba(15, 23, 42, 0.1);
-            --card-shadow: 0 22px 50px rgba(15, 23, 42, 0.09);
-            --sidebar-bg: #0d1320;
-            --sidebar-panel: rgba(255, 255, 255, 0.06);
-            --sidebar-line: rgba(148, 163, 184, 0.18);
-            --sidebar-ink: #f8fafc;
-            --sidebar-muted: #cbd5e1;
+            --bg: #06090f;
+            --panel: #10151f;
+            --panel-soft: #111824;
+            --text: #f4f7fb;
+            --muted: #9ca4b7;
+            --accent: #e50914;
+            --accent-soft: rgba(229, 9, 20, 0.16);
+            --border: rgba(255, 255, 255, 0.1);
+            --shadow: 0 28px 70px rgba(0, 0, 0, 0.55);
         }
 
         html, body, [class*="css"] {
-            font-family: "Aptos", "Segoe UI", sans-serif;
-        }
-
-        .stApp {
-            background:
-                radial-gradient(circle at top left, rgba(15, 118, 110, 0.16), transparent 34%),
-                radial-gradient(circle at top right, rgba(183, 121, 31, 0.12), transparent 24%),
-                linear-gradient(180deg, #f9f5ee 0%, #eef4f2 48%, #f9f6f0 100%);
+            background: var(--bg) !important;
+            color: var(--text) !important;
+            font-family: "Inter", "Segoe UI", sans-serif;
         }
 
         .stApp,
-        [data-testid="stAppViewContainer"],
-        [data-testid="stMain"] {
-            color: var(--ink);
-        }
-
         [data-testid="stAppViewContainer"] > .main {
-            background: transparent;
+            background: linear-gradient(180deg, #070a0f 0%, #0f1320 100%) !important;
         }
 
         .block-container {
-            max-width: 1380px;
-            padding-top: 1.6rem;
-            padding-bottom: 3rem;
+            padding-top: 1.4rem;
+            padding-bottom: 2.4rem;
+            max-width: 1460px;
         }
 
         div[data-testid="stSidebar"] {
-            background:
-                radial-gradient(circle at top right, rgba(15, 118, 110, 0.22), transparent 28%),
-                linear-gradient(180deg, #0d1320 0%, #111827 56%, #18212f 100%);
-            border-right: 1px solid rgba(255, 255, 255, 0.06);
+            background: #0b111b !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
         }
 
         div[data-testid="stSidebar"] * {
-            color: var(--sidebar-ink);
+            color: var(--text) !important;
         }
 
-        div[data-testid="stSidebar"] p,
-        div[data-testid="stSidebar"] label,
-        div[data-testid="stSidebar"] span,
-        div[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-        div[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
-            color: var(--sidebar-muted) !important;
+        .css-1d391kg, .stTextInput input, .stNumberInput input, .stTextArea textarea, [data-baseweb="select"] > div {
+            background: rgba(255, 255, 255, 0.04) !important;
+            color: var(--text) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 18px !important;
         }
 
-        div[data-testid="stSidebar"] h1,
-        div[data-testid="stSidebar"] h2,
-        div[data-testid="stSidebar"] h3 {
-            color: var(--sidebar-ink) !important;
-        }
-
-        div[data-testid="stSidebar"] [data-baseweb="select"] > div,
-        div[data-testid="stSidebar"] .stNumberInput input,
-        div[data-testid="stSidebar"] .stTextInput input,
-        div[data-testid="stSidebar"] .stTextArea textarea {
-            background: var(--sidebar-panel) !important;
-            color: var(--sidebar-ink) !important;
-            border: 1px solid var(--sidebar-line) !important;
-            border-radius: 16px !important;
-        }
-
-        div[data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"] {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px dashed rgba(255, 255, 255, 0.18);
-            border-radius: 18px;
-        }
-
-        div[data-testid="stSidebar"] button {
-            border-radius: 16px !important;
-            min-height: 48px;
-            font-weight: 600;
-        }
-
-        div[data-testid="stSidebar"] button[data-testid="baseButton-primary"],
-        div[data-testid="stSidebar"] button[kind="primary"] {
-            background: linear-gradient(135deg, #0f766e, #14b8a6) !important;
-            color: #f8fafc !important;
+        .stSidebar .stButton > button,
+        .stSidebar .stDownloadButton > button,
+        .stButton > button,
+        .stDownloadButton > button {
+            background: linear-gradient(90deg, #e50914 0%, #ff3a5b 100%) !important;
+            color: #fff !important;
             border: none !important;
-            box-shadow: 0 18px 34px rgba(20, 184, 166, 0.18);
-        }
-
-        div[data-testid="stSidebar"] button[data-testid="baseButton-secondary"],
-        div[data-testid="stSidebar"] button[kind="secondary"] {
-            background: rgba(255, 255, 255, 0.03) !important;
-            color: var(--sidebar-ink) !important;
-            border: 1px solid var(--sidebar-line) !important;
+            border-radius: 999px !important;
+            box-shadow: 0 18px 40px rgba(229, 9, 20, 0.28) !important;
+            font-weight: 700 !important;
+            min-height: 46px !important;
         }
 
         .hero-shell {
-            background:
-                radial-gradient(circle at top left, rgba(255, 255, 255, 0.14), transparent 28%),
-                radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.22), transparent 32%),
-                linear-gradient(135deg, rgba(12, 17, 29, 0.98), rgba(14, 65, 70, 0.96), rgba(21, 128, 61, 0.92));
+            background: linear-gradient(135deg, rgba(10, 13, 20, 0.96), rgba(18, 23, 34, 0.98));
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: 30px;
-            padding: 1.9rem 1.8rem;
-            color: #f9fafb;
-            box-shadow: 0 30px 70px rgba(12, 17, 29, 0.22);
-            margin-bottom: 1.2rem;
-            position: relative;
-            overflow: hidden;
+            padding: 2rem 2rem 1.8rem 2rem;
+            margin-bottom: 1.4rem;
+            box-shadow: var(--shadow);
         }
 
         .hero-kicker {
-            font-size: 0.8rem;
-            letter-spacing: 0.18em;
+            color: #8e98ac;
+            letter-spacing: 0.24em;
             text-transform: uppercase;
-            opacity: 0.75;
-            margin-bottom: 0.6rem;
-            font-family: "Trebuchet MS", "Verdana", sans-serif;
+            font-size: 0.84rem;
+            margin-bottom: 0.65rem;
         }
 
         .hero-title {
-            font-size: clamp(2.1rem, 3.7vw, 3.25rem);
-            line-height: 1.03;
-            margin: 0 0 0.7rem 0;
-            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-            font-weight: 700;
+            color: #f9fbff;
+            font-size: clamp(2.6rem, 4.8vw, 4.4rem);
+            margin: 0 0 0.9rem 0;
+            line-height: 1.02;
+            font-weight: 800;
         }
 
         .hero-copy {
-            max-width: 58rem;
-            color: rgba(249, 250, 251, 0.88);
+            color: #b6becf;
             font-size: 1.02rem;
-            line-height: 1.6;
-            margin: 0;
-            font-family: "Aptos", "Segoe UI", sans-serif;
-        }
-
-        .mini-card-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-            gap: 0.95rem;
-            margin: 1rem 0 1.3rem 0;
-        }
-
-        .mini-card {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(250, 248, 243, 0.9));
-            border: 1px solid var(--line);
-            border-radius: 22px;
-            padding: 1.05rem;
-            box-shadow: var(--card-shadow);
-        }
-
-        .mini-card h4 {
-            margin: 0 0 0.35rem 0;
-            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-            color: var(--ink);
-        }
-
-        .mini-card p,
-        .section-copy,
-        .callout span {
-            margin: 0;
-            color: var(--muted);
-            font-size: 0.95rem;
-            line-height: 1.55;
-            font-family: "Aptos", "Segoe UI", sans-serif;
-        }
-
-        .callout {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(250, 248, 243, 0.92));
-            border: 1px solid var(--line);
-            border-left: 5px solid var(--accent);
-            border-radius: 22px;
-            padding: 1rem 1rem 0.95rem 1rem;
-            box-shadow: var(--card-shadow);
-        }
-
-        .callout strong {
-            display: block;
-            margin-bottom: 0.35rem;
-            color: var(--ink);
-            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+            line-height: 1.75;
+            max-width: 62rem;
+            margin: 0 0 1.3rem 0;
         }
 
         .pill-row {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.6rem;
-            margin-top: 1rem;
+            gap: 0.7rem;
         }
 
         .pill {
-            background: rgba(255, 255, 255, 0.14);
-            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(229, 9, 20, 0.18);
+            color: #fff;
             border-radius: 999px;
-            padding: 0.45rem 0.9rem;
+            padding: 0.55rem 1rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .mini-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .mini-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 24px;
+            padding: 1.25rem;
+            box-shadow: 0 24px 58px rgba(0, 0, 0, 0.18);
+        }
+
+        .mini-card h4 {
+            margin: 0 0 0.75rem 0;
             color: #f8fafc;
-            font-size: 0.86rem;
-            font-family: "Aptos", "Segoe UI", sans-serif;
-            backdrop-filter: blur(8px);
+        }
+
+        .mini-card p {
+            margin: 0;
+            color: #aac1dc;
+            line-height: 1.65;
+        }
+
+        .callout {
+            background: rgba(229, 9, 20, 0.08);
+            border: 1px solid rgba(229, 9, 20, 0.16);
+            border-radius: 26px;
+            padding: 1.1rem 1.2rem;
+            margin-bottom: 1rem;
+            color: #eef2ff;
         }
 
         h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-            color: var(--ink) !important;
-            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-            letter-spacing: -0.02em;
+            color: #f8fafc !important;
         }
 
         p, li, label, span, .stMarkdown, .stText, .stCaption {
-            color: var(--muted);
+            color: #a7afc8 !important;
         }
 
         [data-testid="stMetric"] {
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(251, 248, 241, 0.96));
-            border: 1px solid var(--line);
-            border-radius: 22px;
-            padding: 1rem 1.05rem;
-            box-shadow: var(--card-shadow);
-            min-height: 118px;
-        }
-
-        [data-testid="stMetricLabel"] p,
-        [data-testid="stMetricLabel"] label,
-        [data-testid="stMetricLabel"] div {
-            color: var(--muted) !important;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-size: 0.78rem !important;
-            font-weight: 600;
-        }
-
-        [data-testid="stMetricValue"] {
-            color: var(--ink) !important;
-            font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-            font-size: 2.15rem !important;
-            line-height: 1.05;
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 24px !important;
+            padding: 1rem 1rem !important;
+            box-shadow: 0 22px 50px rgba(0, 0, 0, 0.4) !important;
+            min-height: 116px !important;
         }
 
         .stTabs [data-baseweb="tab-list"] {
-            background: rgba(255, 255, 255, 0.68);
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            display: inline-flex;
-            gap: 0.4rem;
-            padding: 0.35rem;
-            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.05);
-        }
-
-        .stTabs [data-baseweb="tab-highlight"] {
-            display: none;
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 999px !important;
+            padding: 0.35rem !important;
+            box-shadow: 0 18px 38px rgba(0, 0, 0, 0.28) !important;
         }
 
         .stTabs [data-baseweb="tab"] {
-            height: auto;
-            background: transparent;
-            border-radius: 999px;
-            color: var(--muted);
-            font-weight: 600;
-            padding: 0.55rem 1rem;
+            background: transparent !important;
+            color: #a7afc8 !important;
+            padding: 0.55rem 1rem !important;
+            font-weight: 600 !important;
         }
 
         .stTabs [aria-selected="true"] {
-            background: linear-gradient(135deg, #0f172a, #0f766e) !important;
-            color: #f8fafc !important;
-            box-shadow: 0 12px 30px rgba(15, 118, 110, 0.22);
+            background: rgba(229, 9, 20, 0.2) !important;
+            color: #fff !important;
         }
 
         details[data-testid="stExpander"] {
-            background: rgba(255, 255, 255, 0.76);
-            border: 1px solid var(--line);
-            border-radius: 20px;
-            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
-            overflow: hidden;
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 22px !important;
+            box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3) !important;
         }
 
         [data-testid="stAlert"] {
-            background: rgba(255, 255, 255, 0.8);
-            border: 1px solid var(--line);
-            border-radius: 20px;
-            color: var(--ink);
-            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
-        }
-
-        [data-testid="stAlert"] p,
-        [data-testid="stAlert"] span,
-        [data-testid="stAlert"] div {
-            color: var(--ink) !important;
+            background: rgba(255, 255, 255, 0.06) !important;
+            border: 1px solid rgba(229, 9, 20, 0.18) !important;
+            border-radius: 20px !important;
+            color: #f8fafc !important;
         }
 
         [data-testid="stDataFrame"],
-        [data-testid="stTable"] {
-            background: rgba(255, 255, 255, 0.84);
-            border: 1px solid var(--line);
-            border-radius: 20px;
-            padding: 0.2rem;
-            box-shadow: 0 16px 34px rgba(15, 23, 42, 0.05);
-        }
-
-        [data-baseweb="select"] > div,
-        .stTextInput input,
-        .stTextArea textarea,
-        .stNumberInput input {
-            background: rgba(255, 255, 255, 0.82) !important;
-            color: var(--ink) !important;
-            border: 1px solid var(--line) !important;
-            border-radius: 16px !important;
-        }
-
-        [data-baseweb="select"] * {
-            color: var(--ink) !important;
-        }
-
-        [data-testid="stFileUploaderDropzone"] {
-            background: rgba(255, 255, 255, 0.7);
-            border: 1px dashed rgba(15, 118, 110, 0.3);
-            border-radius: 18px;
-        }
-
-        .stButton > button,
-        .stDownloadButton > button {
-            border-radius: 16px;
-            min-height: 48px;
-            font-weight: 600;
-            border: 1px solid var(--line);
-            background: rgba(255, 255, 255, 0.8);
-            color: var(--ink);
-            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
-        }
-
-        .stButton > button[data-testid="baseButton-primary"],
-        .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg, #0f172a, #0f766e) !important;
-            color: #f8fafc !important;
-            border: none !important;
-        }
-
+        [data-testid="stTable"],
         .stPlotlyChart,
         .stAltairChart {
-            background: rgba(255, 255, 255, 0.74);
-            border: 1px solid var(--line);
-            border-radius: 22px;
-            padding: 0.55rem 0.7rem 0.35rem 0.7rem;
-            box-shadow: 0 18px 38px rgba(15, 23, 42, 0.05);
+            background: rgba(255, 255, 255, 0.04) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 24px !important;
+            padding: 0.75rem !important;
+            box-shadow: 0 22px 50px rgba(0, 0, 0, 0.35) !important;
         }
 
         @media (max-width: 960px) {
             .hero-shell {
-                padding: 1.45rem 1.25rem;
-                border-radius: 24px;
+                padding: 1.35rem 1.2rem;
             }
 
             [data-testid="stMetric"] {
-                min-height: 106px;
+                min-height: 104px !important;
             }
         }
         </style>
@@ -441,14 +287,14 @@ def _render_hero() -> None:
     st.markdown(
         f"""
         <div class="hero-shell">
-            <div class="hero-kicker">Hybrid ML Recommender</div>
+            <div class="hero-kicker">AI model concierge</div>
             <div class="hero-title">{APP_TITLE}</div>
             <p class="hero-copy">{APP_SUBTITLE}</p>
             <div class="pill-row">
-                <span class="pill">Live benchmark leaderboard</span>
-                <span class="pill">Meta-model top 3 ranking</span>
-                <span class="pill">Data quality diagnostics</span>
-                <span class="pill">Export-ready report</span>
+                <span class="pill">Modern dark analytics</span>
+                <span class="pill">Meta-model recommendations</span>
+                <span class="pill">Benchmark leaderboard</span>
+                <span class="pill">Exportable decision reports</span>
             </div>
         </div>
         """,
@@ -463,29 +309,29 @@ def _style_altair_chart(chart: Any) -> Any:
         .configure(background="transparent")
         .configure_view(strokeOpacity=0)
         .configure_axis(
-            labelColor="#475467",
-            titleColor="#101828",
-            domainColor="rgba(15, 23, 42, 0.16)",
-            tickColor="rgba(15, 23, 42, 0.16)",
-            gridColor="rgba(148, 163, 184, 0.22)",
+            labelColor="#cbd5e1",
+            titleColor="#e2e8f0",
+            domainColor="rgba(255, 255, 255, 0.22)",
+            tickColor="rgba(255, 255, 255, 0.22)",
+            gridColor="rgba(148, 163, 184, 0.18)",
             labelFont="Aptos",
             titleFont="Aptos",
             labelFontSize=12,
             titleFontSize=13,
         )
         .configure_legend(
-            labelColor="#475467",
-            titleColor="#101828",
+            labelColor="#e2e8f0",
+            titleColor="#e2e8f0",
             labelFont="Aptos",
             titleFont="Aptos",
         )
         .configure_header(
-            labelColor="#101828",
-            titleColor="#101828",
+            labelColor="#e2e8f0",
+            titleColor="#e2e8f0",
             labelFont="Aptos",
             titleFont="Aptos",
         )
-        .configure_title(color="#101828", font="Aptos")
+        .configure_title(color="#e2e8f0", font="Aptos")
     )
 
 
@@ -511,11 +357,29 @@ def load_demo_dataframe() -> pd.DataFrame:
 
 @st.cache_resource(show_spinner=False)
 def load_meta_predictor() -> MetaModelPredictor | None:
-    """Load the persisted meta-model artifacts if available."""
+    """Load the persisted meta-model artifacts if available, with fallback training."""
     try:
-        return MetaModelPredictor.load()
-    except Exception:  # noqa: BLE001
-        return None
+        predictor = MetaModelPredictor.load()
+        logger.info("Loaded meta-model artifacts successfully.")
+        return predictor
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Meta-model load failed: %s", exc)
+
+    try:
+        from meta_recommender.config import META_DATASET_PATH
+
+        if META_DATASET_PATH.exists():
+            logger.info("Meta dataset available at %s; training fallback meta-model.", META_DATASET_PATH)
+            meta_df = pd.read_csv(META_DATASET_PATH)
+            predictor = MetaModelPredictor.train(meta_df)
+            predictor.save()
+            logger.info("Fallback meta-model training completed and saved.")
+            return predictor
+        logger.warning("META_DATASET_PATH does not exist: %s", META_DATASET_PATH)
+    except Exception as train_exc:
+        logger.error("Failed to train fallback meta-model: %s", train_exc, exc_info=True)
+
+    return None
 
 
 def run_eda(df: pd.DataFrame, target_column: str) -> dict[str, Any]:
@@ -752,117 +616,7 @@ def export_results(results: dict, eda_results: dict, df: pd.DataFrame, best_mode
         st.download_button("Download Best Model", model_bytes, "best_model.pkl")
 
 
-# Removed old render_app
-    pass
-    
-    # Sidebar for inputs
-    with st.sidebar:
-        st.header("Dataset Setup")
-        source = st.radio("Dataset source", ["Upload CSV", "Demo dataset"])
-        
-        df = None
-        dataset_name = ""
-        if source == "Upload CSV":
-            uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-            if uploaded_file:
-                df = pd.read_csv(uploaded_file)
-                dataset_name = uploaded_file.name
-        else:
-            df = load_demo_dataframe()
-            dataset_name = DEMO_DATASET_NAME
-        
-        target_column = ""
-        if df is not None and not df.empty:
-            target_column = st.selectbox("Target column", df.columns.tolist(), index=df.columns.tolist().index(guess_target_column(df)) if guess_target_column(df) in df.columns else 0)
-        
-        # Advanced settings
-        with st.expander("Advanced Settings"):
-            test_size = st.slider("Test size", 0.1, 0.5, DEFAULT_TEST_SIZE)
-            random_state = st.number_input("Random seed", value=DEFAULT_RANDOM_STATE)
-            
-            st.subheader("Preprocessing")
-            impute_missing = st.checkbox("Impute missing values", True)
-            remove_outliers = st.checkbox("Remove outliers", False)
-            scaler = st.selectbox("Scaling", ["none", "standard", "minmax"])
-            encode_categorical = st.checkbox("Encode categorical", True)
-            
-            st.subheader("Model Selection")
-            problem_type = detect_task_type(df[target_column]) if df is not None and target_column else "classification"
-            all_models = list(get_candidate_models(problem_type).keys())
-            selected_models = st.multiselect("Models to train", all_models, default=all_models[:5])
-        
-        run_analysis = st.button("Run Analysis", type="primary")
-    
-    if df is not None and run_analysis:
-        with st.spinner("Running analysis..."):
-            try:
-                # EDA
-                eda_results = run_eda(df, target_column)
-                
-                # Preprocessing
-                preprocess_options = {
-                    "impute_missing": impute_missing,
-                    "remove_outliers": remove_outliers,
-                    "scaler": scaler,
-                    "encode_categorical": encode_categorical
-                }
-                processed_df, preprocess_log = preprocess_data(df, target_column, preprocess_options)
-                
-                # Train models
-                results = train_models(processed_df, target_column, test_size, random_state, selected_models)
-                
-                # Recommendations
-                recommendations = generate_recommendations(results, eda_results)
-                
-                # Display results
-                st.header("Dataset Insights")
-                st.write(f"Rows: {len(df)}, Columns: {len(df.columns)}")
-                st.write(f"Problem type: {results['problem_type']}")
-                
-                st.header("EDA Summary")
-                st.subheader("Missing Values")
-                st.json(eda_results["missing_values"])
-                st.subheader("Recommendations")
-                for rec in eda_results["recommendations"]:
-                    st.write(f"- {rec}")
-                
-                st.header("Preprocessing Applied")
-                for log in preprocess_log["log"]:
-                    st.write(f"- {log}")
-                
-                st.header("Model Leaderboard")
-                results_df = pd.DataFrame.from_dict({k: v for k, v in results["results"].items() if "error" not in v}, orient='index')
-                st.dataframe(results_df)
-                
-                if recommendations["best_model"]:
-                    st.header("Best Model")
-                    st.write(f"**{recommendations['best_model']}**")
-                    st.write(recommendations["reasoning"])
-                
-                # Meta-model insights
-                meta_predictor = load_meta_predictor()
-                if meta_predictor:
-                    st.header("Meta-Model Insights")
-                    try:
-                        meta_result = recommend_for_dataframe(processed_df, meta_predictor, target_column=target_column)
-                        st.write(f"Meta-model recommends: {meta_result.get('best_model', 'N/A')}")
-                        if "meta_model_metrics" in meta_result:
-                            st.json(meta_result["meta_model_metrics"])
-                    except Exception as e:
-                        st.warning(f"Meta-model failed: {str(e)}")
-                else:
-                    st.info("Meta-model artifacts not available. Train a meta-model first.")
-                
-                # Export
-                export_results(results, eda_results, processed_df, recommendations.get("best_model"))
-                
-            except Exception as e:
-                st.error(f"Analysis failed: {str(e)}")
-                logger.error("Analysis error", exc_info=True)
 
-
-if __name__ == "__main__":
-    render_app()
 
 
 def guess_target_column(df: pd.DataFrame) -> str:
@@ -1646,15 +1400,16 @@ def render_app() -> None:
             target_index = df.columns.get_loc(guessed_target)
             target_column = st.selectbox("Target column", options=df.columns.tolist(), index=target_index)
 
-        analysis_mode = st.radio(
+        analysis_mode = st.selectbox(
             "Analysis mode",
-            options=["Hybrid", "Benchmark only", "Meta only"],
-            help="Hybrid runs both the live benchmark and the trained meta-model.",
+            options=["Hybrid", "Meta only", "Benchmark only"],
+            index=0,
+            help="Hybrid runs both meta-model guidance and live benchmarking where available.",
         )
         test_size = st.slider("Holdout ratio", min_value=0.15, max_value=0.40, value=DEFAULT_TEST_SIZE, step=0.05)
         random_state = st.number_input("Random seed", min_value=1, max_value=9999, value=DEFAULT_RANDOM_STATE, step=1)
-        show_meta_features = st.toggle("Show meta-feature panel", value=True)
-        show_prediction_sample = st.toggle("Show prediction sample", value=True)
+        show_meta_features = st.checkbox("Show meta-feature panel", value=True)
+        show_prediction_sample = st.checkbox("Show prediction sample", value=True)
 
         run_analysis = st.button("Run analysis", type="primary", use_container_width=True, disabled=df is None)
         clear_report = st.button("Clear report", use_container_width=True)
